@@ -9,6 +9,12 @@ It talks to tmux directly (`list-sessions`, `list-windows`, `list-panes`, `captu
 ## Install
 
 ```sh
+curl -fsSL https://dl.sophonz.io/tmui/install.sh | sh
+```
+
+It puts `tmui` in `~/.local/bin` after checking its SHA-256 (`TMUI_INSTALL_DIR` puts it elsewhere, `TMUI_VERSION=v0.1.1` pins a release). With Go:
+
+```sh
 go install github.com/sophonz-labs/tmui@latest
 ```
 
