@@ -4,7 +4,7 @@ A terminal UI for tmux. It shows a tmux server's sessions, windows and panes in 
 
 It talks to tmux directly (`list-sessions`, `list-windows`, `list-panes`, `capture-pane`), so it works with any tmux setup and needs nothing else running.
 
-<!-- screenshot: docs/captures/01-sessions.txt -->
+![tmui: the sessions of a tmux server](docs/captures/01-sessions.png)
 
 ## Install
 
@@ -30,6 +30,10 @@ tmui --version
 ```
 
 The screen starts on the sessions list. `enter` goes down a level (sessions, windows, panes, a pane's output), `esc` comes back up. `?` lists every key.
+
+| Windows | Panes | A pane's output |
+|---|---|---|
+| ![windows](docs/captures/02-windows.png) | ![panes](docs/captures/03-panes.png) | ![output](docs/captures/04-output.png) |
 
 ## Keys
 
