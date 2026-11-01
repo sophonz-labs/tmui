@@ -1,0 +1,33 @@
+Server:   -L tmui-demo                  <enter> panes     <:> command                                    _|_ ._ _      o
+tmux:     3.8                           <a> attach        <esc> back                                      |_ | | | |_| |
+Sessions: 3 (0 attached)                <n> new           <?> help                                                v0.1.0
+Windows:  6                             <R> rename
+Panes:    7                             <ctrl-d> kill
+tmui:     in another server             </> filter
+┌────────────────────────────────────────────────── Windows(web)[3] ───────────────────────────────────────────────────┐
+│ # NAME    PANES COMMAND PATH                                                                                         │
+│ 0 server  1     bash    ~/web                                                                                        │
+│ 1 editor  1     bash    ~/web                                                                                        │
+│ 2 shell * 2     bash    ~/web                                                                                        │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+ <sessions>   <windows>

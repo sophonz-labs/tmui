@@ -1,0 +1,33 @@
+Server:   -L tmui-demo                  <enter> windows   </> filter                                     _|_ ._ _      o
+tmux:     3.8                           <p> panes         <:> command                                     |_ | | | |_| |
+Sessions: 3 (0 attached)                <a> attach        <esc> back                                              v0.1.0
+Windows:  6                             <n> new           <?> help
+Panes:    7                             <R> rename
+tmui:     in another server             <ctrl-d> kill
+┌────────────────────────────────────────────────── Sessions(all)[3] ──────────────────────────────────────────────────┐
+│ NAME  WINDOWS ATTACHED AGE CURRENT WINDOW                                                                            │
+│ api   2       0        3m  0:logs                                                                                    │
+│ notes 1       0        3m  0:todo                                                                                    │
+│ web   3       0        3m  2:shell                                                                                   │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+ <sessions>

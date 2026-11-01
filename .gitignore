@@ -1,0 +1,4 @@
+/tmui
+/dist/
+*.test
+*.out

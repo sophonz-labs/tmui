@@ -1,0 +1,33 @@
+Server:   -L tmui-demo                  <j/k> scroll      <?> help                                       _|_ ._ _      o
+tmux:     3.8                           </> search                                                        |_ | | | |_| |
+Sessions: 3 (0 attached)                <n/N> next/prev                                                           v0.1.0
+Windows:  6                             <r> reload
+Panes:    7                             <:> command
+tmui:     in another server             <esc> back
+┌────────────────────────────────────────────── Output(api %4) </items> ───────────────────────────────────────────────┐
+│tail -f access.log                                                                                                    │
+│$ tail -f access.log                                                                                                  │
+│GET /health 200 2ms                                                                                                   │
+│GET /items 200 14ms                                                                                                   │
+│POST /items 201 22ms                                                                                                  │
+│GET /items/7 404 1ms                                                                                                  │
+│GET /health 200 1ms                                                                                                   │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+ <sessions>   <windows>   <panes>   <output>

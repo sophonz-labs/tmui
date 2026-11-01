@@ -1,0 +1,33 @@
+Server:   -L tmui-demo                  <enter> output    <:> command                                    _|_ ._ _      o
+tmux:     3.8                           <a> attach to it  <esc> back                                      |_ | | | |_| |
+Sessions: 3 (0 attached)                <s> split below   <?> help                                                v0.1.0
+Windows:  6                             <v> split right
+Panes:    7                             <ctrl-d> kill
+tmui:     in another server             </> filter
+┌─────────────────────────────────────────────── Panes(web:2 shell)[2] ────────────────────────────────────────────────┐
+│ #   PANE WINDOW COMMAND PID   SIZE  PATH                                                                             │
+│ 2.0 %2   shell  bash    89493 60x34 ~/web                                                                            │
+│ 2.1 %3 * shell  bash    89495 59x34 ~/web                                                                            │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+ <sessions>   <windows>   <panes>
