@@ -1,11 +1,12 @@
-Server:   -L tmui-demo                  <j/k> scroll      <?> help                                       _|_ ._ _      o
-tmux:     3.8                           </> search                                                        |_ | | | |_| |
-Sessions: 3 (0 attached)                <n/N> next/prev                                                           v0.1.0
-Windows:  6                             <r> reload
-Panes:    7                             <:> command
-tmui:     in another server             <esc> back
+Server:   -L tmui-demo                  <j/k> scroll                                 /$$                             /$$
+tmux:     3.8                           </> search                                  | $$                            |__/
+Sessions: 3 (0 attached)                <n/N> next/prev                            /$$$$$$   /$$$$$$/$$$$  /$$   /$$ /$$
+Windows:  6                             <r> reload                                |_  $$_/  | $$_  $$_  $$| $$  | $$| $$
+Panes:    7                             <:> command                                 | $$    | $$ \ $$ \ $$| $$  | $$| $$
+tmui:     dev · in another server       <esc> back                                  | $$ /$$| $$ | $$ | $$| $$  | $$| $$
+                                        <?> help                                    |  $$$$/| $$ | $$ | $$|  $$$$$$/| $$
+                                                                                     \___/  |__/ |__/ |__/ \______/ |__/
 ┌────────────────────────────────────────────── Output(api %4) </items> ───────────────────────────────────────────────┐
-│tail -f access.log                                                                                                    │
 │$ tail -f access.log                                                                                                  │
 │GET /health 200 2ms                                                                                                   │
 │GET /items 200 14ms                                                                                                   │
@@ -28,6 +29,5 @@ tmui:     in another server             <esc> back
 │                                                                                                                      │
 │                                                                                                                      │
 │                                                                                                                      │
-│                                                                                                                      │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
- <sessions>   <windows>   <panes>   <output>
+ <sessions>   <panes>   <output>

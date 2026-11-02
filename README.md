@@ -57,8 +57,9 @@ The screen starts on the sessions list. `enter` goes down a level (sessions, win
 | `s` `v` | panes | split below, split right |
 | `ctrl-d` | sessions, windows, panes | kill (asks first) |
 | `p` | sessions | the session's panes |
-| `ctrl-r` | everywhere | refresh now (it also refreshes every 2 seconds) |
-| `:` | everywhere | command: `:sessions`, `:windows [session]`, `:panes [session]`, `:ext`, `:tmux <args>`, `:q` |
+| `ctrl-r` | everywhere | refresh now (it also refreshes every 2 seconds), and read config.yaml again |
+| `ctrl-e` | everywhere | the header on and off |
+| `:` | everywhere | command: `:sessions`, `:windows [session]`, `:panes [session]`, `:ext`, `:config`, `:logo`, `:headless`, `:tmux <args>`, `:q` |
 | `?` | everywhere | help |
 
 `:tmux <args>` runs a tmux command on the same server, for example `:tmux new-window -d -n logs` or `:tmux show -g`. What it prints opens in the pager.
@@ -93,6 +94,28 @@ A small plugin:
 - `mode` is `background` (the last line of output goes to the status line), `foreground` (the command gets the terminal), or `popup` (a tmux popup over tmui, inside tmux 3.2 or later). `confirm` asks first.
 - A command is `:name [args]`, with `{args}`.
 - tmui's own keys and commands always win. A plugin key that meets one is left out, and `:ext` says so.
+
+## Config
+
+Settings live in `~/.config/tmui/config.yaml` (or under `$XDG_CONFIG_HOME`), as k9s keeps its own. Without the file tmui uses the defaults. A key it does not know, or a value it cannot use, is a warning in the status line and in `:config`, and the default stands. tmui reads the file again when it changes, and on `ctrl-r`.
+
+```sh
+tmui config          # the settings in effect, and where each comes from
+tmui config edit     # open it in $EDITOR, made with every default commented if missing
+tmui config path
+```
+
+| Key | Default | |
+|---|---|---|
+| `ui.logo` | `true` | the logo at the header's top right; `:logo` turns it off for now |
+| `ui.headless` | `false` | no header at all; `ctrl-e` or `:headless` toggles it for now |
+| `ui.color` | `true` | `false` draws without colour, as `NO_COLOR` (which always wins) |
+| `refreshRate` | `2s` | how often tmui reads tmux again, `500ms` or more |
+| `startView` | `sessions` | the view it opens on: `sessions`, `windows` or `panes` |
+| `plugins.enabled` | `true` | `false` loads no plugins |
+| `plugins.disabled` | `[]` | plugins to leave out, by name |
+
+[config.example.yaml](config.example.yaml) has them all. The logo needs 116 columns and 20 rows; narrower, the header ends in a one-row `tmui`.
 
 ## Attach and come back
 

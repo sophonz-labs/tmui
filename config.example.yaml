@@ -1,0 +1,16 @@
+# tmui's settings: copy to ~/.config/tmui/config.yaml (or under
+# $XDG_CONFIG_HOME), or run `tmui config edit`. Every key is optional;
+# these are the defaults. tmui reads the file again when it changes.
+
+ui:
+  logo: true          # the logo at the header's top right
+  headless: false     # no header at all (ctrl-e toggles it)
+  color: true         # false: no colour, as NO_COLOR (which always wins)
+
+refreshRate: 2s       # how often tmui reads tmux again; 500ms or more
+
+startView: sessions   # the view it opens on: sessions, windows or panes
+
+plugins:
+  enabled: true       # false: load no plugins (tmui ext)
+  disabled: []        # plugins to leave out, by name: [lazygit]

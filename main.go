@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/sophonz-labs/tmui/internal/config"
 	"github.com/sophonz-labs/tmui/internal/plugin"
 	"github.com/sophonz-labs/tmui/internal/ui"
 )
@@ -14,6 +15,9 @@ import (
 var version = "dev"
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "config" {
+		os.Exit(config.Main("tmui", ui.StartViews(), os.Args[2:], os.Stdout))
+	}
 	if len(os.Args) > 1 && os.Args[1] == "ext" {
 		os.Exit(plugin.Main("tmui", ui.Builtins(), os.Args[2:], os.Stdin, os.Stdout))
 	}
@@ -23,6 +27,7 @@ func main() {
 
 usage: tmui [-L socket-name | -S socket-path]
        tmui ext list | install <name|path|url> | remove <name>
+       tmui config [show] | path | edit
 
   -L name     use the tmux server on socket name (as tmux -L)
   -S path     use the tmux server at socket path (as tmux -S)

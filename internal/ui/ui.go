@@ -10,10 +10,12 @@ import (
 	"os/exec"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/term"
 
+	"github.com/sophonz-labs/tmui/internal/config"
 	"github.com/sophonz-labs/tmui/internal/plugin"
 )
 
@@ -80,6 +82,12 @@ type app struct {
 	plugins []*plugin.Plugin
 	pset    *plugin.Set
 
+	cfg      *config.Config
+	logoOn   bool         // ui.logo, until :logo says otherwise
+	headless bool         // ui.headless, likewise
+	rate     atomic.Int64 // refreshRate, read by fetchLoop
+	ticks    int
+
 	snaps   chan *snap
 	refresh chan struct{}
 	later   chan func()
@@ -101,12 +109,19 @@ func Run(o Options) int {
 	if a.at.ownSession != "" {
 		a.stack[0].sel = a.at.ownSession
 	}
+	if v := a.cfg.StartView; v != "sessions" {
+		a.runCommand(v)
+	}
 	scr, err := openScreen()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "tmui:", err)
 		return 1
 	}
 	a.scr = scr
+	scr.mono = !a.cfg.Color
+	if n := len(a.cfg.Warnings); n > 0 {
+		a.say(fmt.Sprintf("config.yaml: %s (and %d more; :config)", a.cfg.Warnings[0], n-1), true)
+	}
 	defer scr.close()
 	go a.fetchLoop()
 	a.loop()
@@ -131,7 +146,7 @@ func newApp(o Options) *app {
 	a := &app{t: t, at: locate(t), version: o.Version, server: server, homeDir: home, stack: []*page{{v: sessionsView{}}},
 		snaps: make(chan *snap, 1), refresh: make(chan struct{}, 1), later: make(chan func(), 16)}
 	a.tmuxVer, _ = tmuxVersion()
-	a.loadPlugins(plugin.Dirs("tmui"))
+	a.applyConfig(config.Load(config.Path("tmui"), startViews))
 	return a
 }
 
@@ -139,7 +154,7 @@ func (a *app) fetchLoop() {
 	for {
 		select {
 		case <-a.refresh:
-		case <-time.After(2 * time.Second):
+		case <-time.After(time.Duration(a.rate.Load())):
 		}
 		s := a.t.fetch()
 		select {
@@ -184,6 +199,9 @@ func (a *app) loop() {
 			}
 			if v, ok := a.top().v.(*pluginView); ok {
 				v.tick(a)
+			}
+			if a.ticks++; a.ticks%4 == 0 && a.cfg.Changed() {
+				a.reloadConfig()
 			}
 			if w == a.w && h == a.h && !expired {
 				continue
@@ -270,7 +288,12 @@ func (a *app) normalKey(k string) {
 	case "?":
 		a.pushPager(&pager{title: "Help", scope: "keys", lines: a.helpText()})
 		return
+	case "ctrl-e":
+		a.headless = !a.headless
+		a.clear()
+		return
 	case "ctrl-r":
+		a.reloadConfig()
 		a.refreshNow()
 		if p.pg != nil && p.pg.reload != nil {
 			a.reloadPager(p.pg)
@@ -579,6 +602,14 @@ func (a *app) runCommand(text string) {
 		a.pushPager(&pager{title: "Help", scope: "keys", lines: a.helpText()})
 	case w == "ext":
 		a.push(pluginsView{})
+	case w == "config":
+		a.push(configView{})
+	case w == "logo":
+		a.logoOn = !a.logoOn
+		a.say(fmt.Sprintf("logo %s for now; ui.logo in config.yaml keeps it", onOff(a.logoOn)), false)
+	case w == "headless":
+		a.headless = !a.headless
+		a.say(fmt.Sprintf("header %s for now (ctrl-e); ui.headless in config.yaml keeps it", onOff(!a.headless)), false)
 	case w == "tmux":
 		if len(words) == 1 {
 			a.say(":tmux <command> [args], e.g. :tmux new-window -d", false)
@@ -614,7 +645,7 @@ func complete(in string, extra ...string) string {
 	if strings.Contains(in, " ") {
 		return in
 	}
-	names := append([]string{"help", "quit", "tmux", "ext"}, extra...)
+	names := append([]string{"help", "quit", "tmux", "ext", "config", "logo", "headless"}, extra...)
 	for n := range viewNames {
 		names = append(names, n)
 	}
@@ -689,9 +720,9 @@ func (a *app) visibleRows(p *page) []row {
 
 func (a *app) headerRows() int {
 	switch {
-	case a.h < 16:
+	case a.h < 16 || a.headless:
 		return 0
-	case fullLogo(a.w, a.h):
+	case a.logoOn && fullLogo(a.w, a.h):
 		return len(logo)
 	}
 	return 6
@@ -775,7 +806,10 @@ func (a *app) header(w, n int) []string {
 		hints = append(hints, hint{"j/k", "scroll"}, hint{"/", "search"}, hint{"n/N", "next/prev"}, hint{"r", "reload"})
 	}
 	hints = append(hints, hint{":", "command"}, hint{"esc", "back"}, hint{"?", "help"})
-	logo := logoLines(w, n, w-c1)
+	var logo []string
+	if a.logoOn {
+		logo = logoLines(w, n, w-c1)
+	}
 	lw := 0
 	if logo != nil {
 		lw = Cells(plain(logo[0])) + 2
@@ -977,7 +1011,8 @@ func (a *app) helpText() []string {
 		"  j k ↑ ↓     up and down        g G     top and bottom",
 		"  ctrl-b ctrl-f  a page          enter l →  into the row (sessions > windows > panes > output)",
 		"  esc h ←     back (or clear the filter)       q   back, quit at the top",
-		"  /           filter the rows    ctrl-r  read everything again now",
+		"  /           filter the rows    ctrl-r  read everything again now, config.yaml too",
+		"  ctrl-e      the header on and off",
 		"",
 		"OUTPUT (a pane's history)",
 		"  /           search             n N     next and previous match",
@@ -992,6 +1027,8 @@ func (a *app) helpText() []string {
 		"  :<view>     switch to a view (tab completes)",
 		"  :tmux <args>  run a tmux command on this server: :tmux new-window -d, :tmux ls",
 		"  :ext        the plugins, what they add and what they run",
+		"  :config     the settings in effect and where each comes from (tmui config edit)",
+		"  :logo  :headless   the logo, the whole header, on or off for now (ctrl-e: the header)",
 		"  :q          quit (or ctrl-c)",
 		"",
 	}
@@ -1002,5 +1039,5 @@ func (a *app) helpText() []string {
 		}
 		out = append(out, "")
 	}
-	return append(out, a.pluginHelp()...)
+	return append(append(out, a.pluginHelp()...), a.configHelp()...)
 }

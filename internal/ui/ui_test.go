@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"github.com/sophonz-labs/tmui/internal/config"
 	"reflect"
 	"strings"
 	"testing"
@@ -142,9 +143,8 @@ func TestLogo(t *testing.T) {
 	if got := logoLines(60, 6, 22); got != nil {
 		t.Errorf("no room for a column of keys: %q", got)
 	}
-	t.Setenv("NO_COLOR", "1")
 	for _, l := range logoLines(200, len(logo), 160) {
-		if strings.ContainsRune(strings.TrimSuffix(l, reset), '\x1b') {
+		if l = monochrome(l); strings.Contains(l, "38;5") {
 			t.Errorf("NO_COLOR: %q", l)
 		}
 	}
@@ -157,6 +157,7 @@ func testApp(w, h int, v view) *app {
 		panes:    map[string][]pane{"web": {{Session: "web", ID: "%0", WindowID: "@0", WindowName: "work", Command: strings.Repeat("긴 명령 ", 30)}}},
 	}
 	a := &app{snap: s, version: "v0.1.0", tmuxVer: "3.8", server: "default", homeDir: "/home/me", w: w, h: h, stack: []*page{{v: v}}, later: make(chan func(), 16), refresh: make(chan struct{}, 1)}
+	a.applyConfig(config.Defaults(startViews))
 	a.loadPlugins(nil)
 	return a
 }
