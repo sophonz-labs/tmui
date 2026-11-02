@@ -13,7 +13,7 @@ import (
 
 // Builtins is what a plugin cannot take: tmui's own : commands and keys.
 func Builtins() plugin.Builtins {
-	cmds := []string{"q", "quit", "q!", "help", "?", "tmux", "ext"}
+	cmds := []string{"q", "quit", "q!", "help", "?", "tmux", "ext", "config", "logo", "headless"}
 	for n := range viewNames {
 		cmds = append(cmds, n)
 	}
@@ -26,7 +26,7 @@ func Builtins() plugin.Builtins {
 }
 
 func (a *app) loadPlugins(dirs []string) {
-	a.plugins = plugin.Load(dirs)
+	a.plugins = a.keepPlugins(plugin.Load(dirs))
 	a.pset = plugin.Resolve(a.plugins, Builtins())
 }
 

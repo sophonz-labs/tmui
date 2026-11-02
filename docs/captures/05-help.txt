@@ -1,9 +1,11 @@
-Server:   -L tmui-demo                  <j/k> scroll      <?> help                                       _|_ ._ _      o
-tmux:     3.8                           </> search                                                        |_ | | | |_| |
-Sessions: 3 (0 attached)                <n/N> next/prev                                                           v0.1.0
-Windows:  6                             <r> reload
-Panes:    7                             <:> command
-tmui:     in another server             <esc> back
+Server:   -L tmui-demo                  <j/k> scroll                                 /$$                             /$$
+tmux:     3.8                           </> search                                  | $$                            |__/
+Sessions: 3 (0 attached)                <n/N> next/prev                            /$$$$$$   /$$$$$$/$$$$  /$$   /$$ /$$
+Windows:  6                             <r> reload                                |_  $$_/  | $$_  $$_  $$| $$  | $$| $$
+Panes:    7                             <:> command                                 | $$    | $$ \ $$ \ $$| $$  | $$| $$
+tmui:     dev · in another server       <esc> back                                  | $$ /$$| $$ | $$ | $$| $$  | $$| $$
+                                        <?> help                                    |  $$$$/| $$ | $$ | $$|  $$$$$$/| $$
+                                                                                     \___/  |__/ |__/ |__/ \______/ |__/
 ┌───────────────────────────────────────────────────── Help(keys) ─────────────────────────────────────────────────────┐
 │tmui: a tmux server's sessions, windows and panes. Everything refreshes every 2 seconds.                              │
 │                                                                                                                      │
@@ -14,7 +16,8 @@ tmui:     in another server             <esc> back
 │  j k ↑ ↓     up and down        g G     top and bottom                                                               │
 │  ctrl-b ctrl-f  a page          enter l →  into the row (sessions > windows > panes > output)                        │
 │  esc h ←     back (or clear the filter)       q   back, quit at the top                                              │
-│  /           filter the rows    ctrl-r  read everything again now                                                    │
+│  /           filter the rows    ctrl-r  read everything again now, config.yaml too                                   │
+│  ctrl-e      the header on and off                                                                                   │
 │                                                                                                                      │
 │OUTPUT (a pane's history)                                                                                             │
 │  /           search             n N     next and previous match                                                      │
@@ -26,8 +29,5 @@ tmui:     in another server             <esc> back
 │              Inside tmux 3.2+: a full-size popup; prefix d closes it, tmui stays.                                    │
 │                                                                                                                      │
 │COMMANDS                                                                                                              │
-│  :<view>     switch to a view (tab completes)                                                                        │
-│  :tmux <args>  run a tmux command on this server: :tmux new-window -d, :tmux ls                                      │
-│  :q          quit (or ctrl-c)                                                                                        │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
- <sessions>   <help>
+ <sessions>   <panes>   <help>
