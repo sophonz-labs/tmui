@@ -15,7 +15,23 @@ A terminal UI for tmux. It shows a tmux server's sessions, windows and panes in 
 
 It talks to tmux directly (`list-sessions`, `list-windows`, `list-panes`, `capture-pane`), so it works with any tmux setup and needs nothing else running.
 
-<!-- screenshot: docs/captures/01-sessions.txt -->
+## Screenshots
+
+The sessions list, with the server's counts and the keys for the view:
+
+![tmui sessions list](docs/screenshots/sessions.png)
+
+A session's panes, with each one's command, size and directory:
+
+![tmui panes of a session](docs/screenshots/panes.png)
+
+A pane's output, searched for `404`:
+
+![tmui output of a pane](docs/screenshots/output.png)
+
+The gh-runs plugin: the GitHub Actions runs of the repository a pane is in:
+
+![tmui gh-runs plugin view](docs/screenshots/plugin.png)
 
 ## Install
 
