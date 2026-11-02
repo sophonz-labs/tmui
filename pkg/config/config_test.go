@@ -111,3 +111,43 @@ func TestExample(t *testing.T) {
 		t.Errorf("config.example.yaml: %v", c.Warnings)
 	}
 }
+
+// A tool's own keys (Flag): a default, read from the file under their
+// section, warned about when unknown or bad, listed and compared.
+func TestFlags(t *testing.T) {
+	os.Unsetenv("NO_COLOR")
+	read := Flag{Key: "st.read", Default: true, Template: "# st:\n#   read: true          # a tool's own key\n"}
+	if c := Defaults(views, read); !c.Flags["st.read"] || c.Value("st.read") != "true" || c.Source["st.read"] != "default" || c.Keys()[len(c.Keys())-1] != "st.read" {
+		t.Errorf("default: %+v", c)
+	}
+	p := filepath.Join(t.TempDir(), "config.yaml")
+	os.WriteFile(p, []byte("st:\n  read: false\n  write: true\n"), 0o644)
+	c := Load(p, views, read)
+	if c.Flags["st.read"] || c.Source["st.read"] != "file" || len(c.Warnings) != 1 || !strings.Contains(c.Warnings[0], "unknown key st.write") {
+		t.Errorf("file: %+v", c)
+	}
+	if c.Same(Defaults(views, read)) {
+		t.Error("Same ignores a flag")
+	}
+	os.WriteFile(p, []byte("st:\n  read: maybe\n"), 0o644)
+	if c := Load(p, views, read); !c.Flags["st.read"] || len(c.Warnings) != 1 {
+		t.Errorf("bad value: %+v", c)
+	}
+	// Without the flag the section is unknown, as before.
+	if c := Load(p, views); len(c.Warnings) != 1 || !strings.Contains(c.Warnings[0], "unknown key st") {
+		t.Errorf("no flag: %v", c.Warnings)
+	}
+	tpl := Template("tool", views, read)
+	if !strings.HasSuffix(tpl, "\n\n"+read.Template) || !strings.HasPrefix(tpl, Template("tool", views)) {
+		t.Errorf("template:\n%s", tpl)
+	}
+	os.WriteFile(p, []byte(strings.ReplaceAll(tpl, "# st:\n#   read", "st:\n  read")), 0o644)
+	if c := Load(p, views, read); len(c.Warnings) != 0 || !c.Same(Defaults(views, read)) {
+		t.Errorf("uncommented flag: %v", c.Warnings)
+	}
+	var out strings.Builder
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if Main("tool", views, []string{"show"}, &out, read) != 0 || !strings.Contains(out.String(), "st.read            true         default") {
+		t.Errorf("show:\n%s", out.String())
+	}
+}

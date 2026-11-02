@@ -15,8 +15,8 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/sophonz-labs/tmui/internal/config"
-	"github.com/sophonz-labs/tmui/internal/plugin"
+	"github.com/sophonz-labs/tmui/pkg/config"
+	"github.com/sophonz-labs/tmui/pkg/plugin"
 )
 
 // Options is how tmui was started.

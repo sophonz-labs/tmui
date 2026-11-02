@@ -1,7 +1,7 @@
 // Package config is <tool>/config.yaml, k9s style: a missing file is the
 // defaults, an unknown key or a bad value is a warning and the default,
-// never an error. tmui and stui share it; the views a tool can start on
-// are its own.
+// never an error. tmui and stui share it; the views a tool can start on,
+// and any true/false keys of its own (Flag), are the tool's.
 package config
 
 import (
@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -20,21 +21,32 @@ import (
 
 // Config is the settings in effect.
 type Config struct {
-	Logo            bool          // ui.logo
-	Headless        bool          // ui.headless: no header at all
-	Color           bool          // ui.color: false is NO_COLOR
-	RefreshRate     time.Duration // refreshRate
-	StartView       string        // startView
-	PluginsEnabled  bool          // plugins.enabled
-	PluginsDisabled []string      // plugins.disabled
+	Logo            bool            // ui.logo
+	Headless        bool            // ui.headless: no header at all
+	Color           bool            // ui.color: false is NO_COLOR
+	RefreshRate     time.Duration   // refreshRate
+	StartView       string          // startView
+	PluginsEnabled  bool            // plugins.enabled
+	PluginsDisabled []string        // plugins.disabled
+	Flags           map[string]bool // the tool's own keys (Flag), by key
 
+	flags    []Flag
 	Path     string
 	ModTime  time.Time         // of the file read, zero when there was none
 	Source   map[string]string // key: "default", "file", or why else
 	Warnings []string
 }
 
-// Keys is every key, in the order show lists them.
+// Flag is a true/false key a tool adds, "section.key" under a section of
+// its own (not ui or plugins).
+type Flag struct {
+	Key      string // "st.read"
+	Default  bool
+	Template string // its commented lines at the end of the edit template
+}
+
+// Keys is every shared key, in the order show lists them; a config's own
+// list (c.Keys) adds its flags.
 var Keys = []string{"ui.logo", "ui.headless", "ui.color", "refreshRate", "startView", "plugins.enabled", "plugins.disabled"}
 
 // MinRefresh is the shortest refreshRate: each refresh runs tmux.
@@ -51,9 +63,12 @@ func Path(tool string) string {
 }
 
 // Defaults is the settings without a file; views[0] is the start view.
-func Defaults(views []string) *Config {
-	c := &Config{Logo: true, Color: true, RefreshRate: 2 * time.Second, StartView: views[0], PluginsEnabled: true, Source: map[string]string{}}
-	for _, k := range Keys {
+func Defaults(views []string, flags ...Flag) *Config {
+	c := &Config{Logo: true, Color: true, RefreshRate: 2 * time.Second, StartView: views[0], PluginsEnabled: true, Flags: map[string]bool{}, flags: flags, Source: map[string]string{}}
+	for _, f := range flags {
+		c.Flags[f.Key] = f.Default
+	}
+	for _, k := range c.Keys() {
 		c.Source[k] = "default"
 	}
 	if _, ok := os.LookupEnv("NO_COLOR"); ok {
@@ -64,8 +79,8 @@ func Defaults(views []string) *Config {
 
 // Load reads path over the defaults. It never fails: what it cannot use
 // is a warning.
-func Load(path string, views []string) *Config {
-	c := Defaults(views)
+func Load(path string, views []string, flags ...Flag) *Config {
+	c := Defaults(views, flags...)
 	c.Path = path
 	st, err := os.Stat(path)
 	if err != nil {
@@ -160,13 +175,49 @@ func (c *Config) parse(data []byte, views []string) {
 			}
 			c.StartView, c.Source["startView"] = v.Value, "file"
 		default:
+			if keys := c.section(k); keys != nil {
+				section(k, v, keys, nil)
+				for fk, b := range keys {
+					c.Flags[k+"."+fk] = *b
+				}
+				continue
+			}
 			c.warn(root.Content[i], "unknown key %s", k)
 		}
 	}
 }
 
+// section is the tool's flags under name, as parse's section takes them, or
+// nil when it has none there.
+func (c *Config) section(name string) map[string]*bool {
+	var keys map[string]*bool
+	for _, f := range c.flags {
+		if sec, k, _ := strings.Cut(f.Key, "."); sec == name {
+			if keys == nil {
+				keys = map[string]*bool{}
+			}
+			b := c.Flags[f.Key]
+			keys[k] = &b
+		}
+	}
+	return keys
+}
+
+// Keys is every key c has, in the order show lists them: the shared ones,
+// then the tool's flags.
+func (c *Config) Keys() []string {
+	keys := append([]string(nil), Keys...)
+	for _, f := range c.flags {
+		keys = append(keys, f.Key)
+	}
+	return keys
+}
+
 // Value is a key's value as show prints it.
 func (c *Config) Value(key string) string {
+	if b, ok := c.Flags[key]; ok {
+		return fmt.Sprint(b)
+	}
 	switch key {
 	case "ui.logo":
 		return fmt.Sprint(c.Logo)
@@ -188,8 +239,8 @@ func (c *Config) Value(key string) string {
 
 // Template is the file edit starts from: every key at its default,
 // commented out, with what it does.
-func Template(tool string, views []string) string {
-	return fmt.Sprintf(`# %[1]s's settings. Every key is optional; these are the defaults.
+func Template(tool string, views []string, flags ...Flag) string {
+	s := fmt.Sprintf(`# %[1]s's settings. Every key is optional; these are the defaults.
 # %[1]s reads this file again when it changes (and on ctrl-r).
 
 # ui:
@@ -205,10 +256,14 @@ func Template(tool string, views []string) string {
 #   enabled: true       # false: load no plugins (%[1]s ext)
 #   disabled: []        # plugins to leave out, by name: [lazygit]
 `, tool, views[0], strings.Join(views, ", "))
+	for _, f := range flags {
+		s += "\n" + f.Template
+	}
+	return s
 }
 
 // Main is "<tool> config ...": path, show, edit.
-func Main(tool string, views []string, args []string, out io.Writer) int {
+func Main(tool string, views []string, args []string, out io.Writer, flags ...Flag) int {
 	path := Path(tool)
 	cmd := ""
 	if len(args) > 0 {
@@ -218,13 +273,13 @@ func Main(tool string, views []string, args []string, out io.Writer) int {
 	case "path":
 		fmt.Fprintln(out, path)
 	case "show", "":
-		c := Load(path, views)
+		c := Load(path, views, flags...)
 		state := "not there: the defaults"
 		if !c.ModTime.IsZero() {
 			state = "read"
 		}
 		fmt.Fprintf(out, "# %s (%s)\n", path, state)
-		for _, k := range Keys {
+		for _, k := range c.Keys() {
 			fmt.Fprintf(out, "%-18s %-12s %s\n", k, c.Value(k), c.Source[k])
 		}
 		for _, w := range c.Warnings {
@@ -236,7 +291,7 @@ func Main(tool string, views []string, args []string, out io.Writer) int {
 				fmt.Fprintln(out, err)
 				return 1
 			}
-			if err := os.WriteFile(path, []byte(Template(tool, views)), 0o644); err != nil {
+			if err := os.WriteFile(path, []byte(Template(tool, views, flags...)), 0o644); err != nil {
 				fmt.Fprintln(out, err)
 				return 1
 			}
@@ -245,17 +300,13 @@ func Main(tool string, views []string, args []string, out io.Writer) int {
 		if editor == "" {
 			editor = os.Getenv("EDITOR")
 		}
-		if editor == "" {
-			editor = "vi"
-		}
-		// $EDITOR may carry flags ("code -w"), as git takes it.
-		c := exec.Command("sh", "-c", editor+` "$1"`, "sh", path)
+		c := editorCmd(editor, path)
 		c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
 		if err := c.Run(); err != nil {
 			fmt.Fprintf(out, "%s config edit: %v\n", tool, err)
 			return 1
 		}
-		for _, w := range Load(path, views).Warnings {
+		for _, w := range Load(path, views, flags...).Warnings {
 			fmt.Fprintln(out, "warning: "+w)
 		}
 	default:
@@ -279,7 +330,7 @@ func (c *Config) Changed() bool {
 
 // Same is whether two configs set the same things (for saying "read again").
 func (c *Config) Same(o *Config) bool {
-	for _, k := range Keys {
+	for _, k := range c.Keys() {
 		if c.Value(k) != o.Value(k) {
 			return false
 		}
@@ -297,4 +348,19 @@ func contains(xs []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// editorCmd opens path in editor. $EDITOR may carry flags ("code -w"), as git
+// takes it, so a shell splits it; Windows has no sh and gets notepad.
+func editorCmd(editor, path string) *exec.Cmd {
+	if runtime.GOOS == "windows" {
+		if editor == "" {
+			editor = "notepad"
+		}
+		return exec.Command(editor, path)
+	}
+	if editor == "" {
+		editor = "vi"
+	}
+	return exec.Command("sh", "-c", editor+` "$1"`, "sh", path)
 }
