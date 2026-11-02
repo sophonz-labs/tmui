@@ -77,6 +77,18 @@ The screen starts on the sessions list. `enter` goes down a level (sessions, win
 | `ctrl-e` | everywhere | the header on and off |
 | `:` | everywhere | command: `:sessions`, `:windows [session]`, `:panes [session]`, `:ext`, `:config`, `:logo`, `:headless`, `:tmux <args>`, `:q` |
 | `?` | everywhere | help |
+| `y` | lists | copy the row's value: a session's name, `session:index` for a window, a pane's id, a plugin row's `url` (else its id) |
+| `Y` | lists | copy the whole row, tab-separated |
+| `v` | output | select lines, from the bottom one on screen; `j` `k` `g` `G` extend the selection |
+| `y` | output | copy the selection, or with none the whole output (every line, not only those on screen) |
+| `z` | output | the output alone on the screen, no frame, for your terminal's own mouse selection; `esc` comes back |
+
+### Copying
+
+The screen belongs to tmui, so a mouse selection takes the frame and the columns with it. `y`, `Y` and `v` copy only the content, as plain text (no colours, no trailing spaces). The text goes out two ways at once:
+
+- **The terminal's clipboard.** Outside tmux, tmui writes OSC 52, which also crosses ssh (iTerm2, kitty, WezTerm, Alacritty, Windows Terminal and foot take it; some need it allowed). Inside tmux, an application's OSC 52 only gets through with `set-clipboard on`, so tmui hands the text to `tmux load-buffer -w` instead: it becomes a tmux paste buffer (`prefix ]`), and tmux sends it on to the terminal unless `set-clipboard` is `off`.
+- **This machine's clipboard,** when it has a tool for it: `pbcopy` on macOS, `wl-copy` on Wayland, `xclip` on X11, `clip.exe` in WSL.
 
 `:tmux <args>` runs a tmux command on the same server, for example `:tmux new-window -d -n logs` or `:tmux show -g`. What it prints opens in the pager.
 
