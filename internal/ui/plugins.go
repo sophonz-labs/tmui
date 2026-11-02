@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sophonz-labs/tmui/internal/plugin"
+	"github.com/sophonz-labs/tmui/pkg/plugin"
 )
 
 // Builtins is what a plugin cannot take: tmui's own : commands and keys.

@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/sophonz-labs/tmui/internal/config"
-	"github.com/sophonz-labs/tmui/internal/plugin"
 	"github.com/sophonz-labs/tmui/internal/ui"
-	"github.com/sophonz-labs/tmui/internal/upgrade"
+	"github.com/sophonz-labs/tmui/pkg/config"
+	"github.com/sophonz-labs/tmui/pkg/plugin"
+	"github.com/sophonz-labs/tmui/pkg/upgrade"
 )
 
 var version = "dev"

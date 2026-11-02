@@ -6,8 +6,8 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/sophonz-labs/tmui/internal/config"
-	"github.com/sophonz-labs/tmui/internal/plugin"
+	"github.com/sophonz-labs/tmui/pkg/config"
+	"github.com/sophonz-labs/tmui/pkg/plugin"
 )
 
 // startViews are the views config.yaml's startView may name.

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sophonz-labs/tmui/internal/config"
+	"github.com/sophonz-labs/tmui/pkg/config"
 )
 
 func TestHeaderFollowsConfig(t *testing.T) {

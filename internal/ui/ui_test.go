@@ -1,7 +1,7 @@
 package ui
 
 import (
-	"github.com/sophonz-labs/tmui/internal/config"
+	"github.com/sophonz-labs/tmui/pkg/config"
 	"reflect"
 	"strings"
 	"testing"
