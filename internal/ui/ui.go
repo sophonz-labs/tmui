@@ -57,6 +57,8 @@ type pager struct {
 	query        string
 	hit          int // the line of the current match
 	reload       func() ([]string, error)
+	selecting    bool // v: lines anchor..cur are marked for y
+	anchor, cur  int
 }
 
 type app struct {
@@ -87,6 +89,9 @@ type app struct {
 	headless bool         // ui.headless, likewise
 	rate     atomic.Int64 // refreshRate, read by fetchLoop
 	ticks    int
+
+	copied string // the last text y put on the clipboard
+	zoom   bool   // z: an output alone on the screen, for the terminal's own selection
 
 	snaps   chan *snap
 	refresh chan struct{}
@@ -223,6 +228,10 @@ func (a *app) push(v view) { a.stack = append(a.stack, &page{v: v}) }
 func (a *app) pushPager(p *pager) { a.stack = append(a.stack, &page{pg: p}) }
 
 func (a *app) pop() {
+	if a.zoom {
+		a.zoom = false
+		a.clear()
+	}
 	if len(a.stack) > 1 {
 		a.stack = a.stack[:len(a.stack)-1]
 	}
@@ -265,6 +274,15 @@ func (a *app) normalKey(k string) {
 		a.pop()
 		return
 	case "esc":
+		if p.pg != nil && p.pg.selecting {
+			p.pg.selecting = false
+			return
+		}
+		if a.zoom {
+			a.zoom = false
+			a.clear()
+			return
+		}
 		if p.filter != "" {
 			p.filter = ""
 			return
@@ -333,6 +351,10 @@ func (a *app) normalKey(k string) {
 		if k == "right" {
 			k = "enter"
 		}
+		if (k == "y" || k == "Y") && r != nil {
+			a.copyRow(p, r, k == "Y")
+			return
+		}
 		if !p.v.key(a, k, r) && !a.pluginKey(p, k, r) && k == "enter" && r == nil {
 			a.say("nothing here", false)
 		}
@@ -345,8 +367,25 @@ func (a *app) normalKey(k string) {
 }
 
 func (a *app) pagerKey(pg *pager, k string) {
+	if pg.selecting && a.selectKey(pg, k) {
+		return
+	}
 	n := a.bodyRows()
 	switch k {
+	case "v":
+		if pg.selecting {
+			pg.selecting = false
+		} else {
+			a.startSelect(pg)
+		}
+		return
+	case "y":
+		a.copyPager(pg)
+		return
+	case "z":
+		a.zoom = !a.zoom
+		a.clear()
+		return
 	case "up", "k":
 		pg.top--
 	case "down", "j", "enter":
@@ -730,6 +769,9 @@ func (a *app) headerRows() int {
 
 // bodyRows is how many table rows fit.
 func (a *app) bodyRows() int {
+	if a.zoom {
+		return a.h
+	}
 	n := a.h - a.headerRows() - 1 - 2 - 1 // footer, frame, column names
 	if a.mode != normal {
 		n--
@@ -738,6 +780,9 @@ func (a *app) bodyRows() int {
 }
 
 func (a *app) render() []string {
+	if p := a.top(); a.zoom && p.pg != nil {
+		return a.bare(p.pg)
+	}
 	lines := a.header(a.w, a.headerRows())
 	if a.mode != normal {
 		lines = append(lines, a.promptLine())
@@ -801,9 +846,10 @@ func (a *app) header(w, n int) []string {
 		for _, ar := range a.pset.Keys(scopeOf(p.v)) {
 			hints = append(hints, hint{ar.A.Key, ar.A.Title})
 		}
-		hints = append(hints, hint{"/", "filter"})
+		hints = append(hints, hint{"/", "filter"}, hint{"y/Y", "copy"})
 	} else {
-		hints = append(hints, hint{"j/k", "scroll"}, hint{"/", "search"}, hint{"n/N", "next/prev"}, hint{"r", "reload"})
+		hints = append(hints, hint{"j/k", "scroll"}, hint{"/", "search"}, hint{"n/N", "next/prev"}, hint{"r", "reload"},
+			hint{"v", "select"}, hint{"y", "copy"}, hint{"z", "zoom"})
 	}
 	hints = append(hints, hint{":", "command"}, hint{"esc", "back"}, hint{"?", "help"})
 	var logo []string
@@ -886,6 +932,10 @@ func (a *app) body(h int) []string {
 		pg := p.pg
 		var rows []string
 		for i := pg.top; i < len(pg.lines) && len(rows) < h-2; i++ {
+			if pg.selecting && i >= min(pg.anchor, pg.cur) && i <= max(pg.anchor, pg.cur) {
+				rows = append(rows, selected+fit(pg.lines[i], inner)+reset)
+				continue
+			}
 			rows = append(rows, highlight(fit(pg.lines[i], inner), pg.query))
 		}
 		return frame(pg.title, pg.scope, -1, pg.query, rows)
@@ -1017,6 +1067,15 @@ func (a *app) helpText() []string {
 		"OUTPUT (a pane's history)",
 		"  /           search             n N     next and previous match",
 		"  space b     a page             r       reload (it follows the pane at the bottom)",
+		"",
+		"COPY (to the clipboard: OSC 52 to the terminal, tmux's buffer inside tmux, and pbcopy,",
+		"      wl-copy, xclip or clip.exe when this machine has one)",
+		"  y           in a table: the row's value (a session's name, session:window, a pane's id,",
+		"              a plugin row's url, else its id)        Y   the whole row, tab-separated",
+		"  v           in an output: select from the bottom line on screen; j k g G extend it",
+		"  y           in an output: the selection, or with none every line of it (not only the",
+		"              ones on screen), as plain text",
+		"  z           in an output: it alone on the screen, no frame, for the mouse; esc comes back",
 		"",
 		"ATTACH",
 		"  a           attach to the session, window or pane under the cursor.",

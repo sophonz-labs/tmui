@@ -215,3 +215,9 @@ func (v panesView) key(a *app, k string, r *row) bool {
 	}
 	return true
 }
+
+// y on a window is session:index, a tmux target.
+func (v windowsView) copyValue(r *row) string { return v.session + ":" + r.cells[0] }
+
+// y on a plugin is its name.
+func (pluginsView) copyValue(r *row) string { return r.cells[0] }
