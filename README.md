@@ -1,5 +1,16 @@
 # tmui
 
+```text
+   /$$                             /$$
+  | $$                            |__/
+ /$$$$$$   /$$$$$$/$$$$  /$$   /$$ /$$
+|_  $$_/  | $$_  $$_  $$| $$  | $$| $$
+  | $$    | $$ \ $$ \ $$| $$  | $$| $$
+  | $$ /$$| $$ | $$ | $$| $$  | $$| $$
+  |  $$$$/| $$ | $$ | $$|  $$$$$$/| $$
+   \___/  |__/ |__/ |__/ \______/ |__/
+```
+
 A terminal UI for tmux. It shows a tmux server's sessions, windows and panes in one screen, lets you make, rename, split and kill them, reads any pane's output, and attaches to a session in a way that comes back to tmui when you detach.
 
 It talks to tmux directly (`list-sessions`, `list-windows`, `list-panes`, `capture-pane`), so it works with any tmux setup and needs nothing else running.

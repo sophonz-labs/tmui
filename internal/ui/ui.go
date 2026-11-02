@@ -669,8 +669,11 @@ func (a *app) visibleRows(p *page) []row {
 }
 
 func (a *app) headerRows() int {
-	if a.h < 16 {
+	switch {
+	case a.h < 16:
 		return 0
+	case fullLogo(a.w, a.h):
+		return len(logo)
 	}
 	return 6
 }
@@ -738,7 +741,7 @@ func (a *app) header(w, n int) []string {
 		label("Sessions:", fmt.Sprintf("%d (%d attached)", len(s.sessions), attached), c1),
 		label("Windows:", fmt.Sprint(nw), c1),
 		label("Panes:", fmt.Sprint(np), c1),
-		label("tmui:", you, c1),
+		label("tmui:", a.version+" · "+you, c1),
 	}
 
 	// The keys: this view's, then the ones everywhere, in columns of n.
@@ -750,10 +753,10 @@ func (a *app) header(w, n int) []string {
 		hints = append(hints, hint{"j/k", "scroll"}, hint{"/", "search"}, hint{"n/N", "next/prev"}, hint{"r", "reload"})
 	}
 	hints = append(hints, hint{":", "command"}, hint{"esc", "back"}, hint{"?", "help"})
-	logo := logoLines(a.version, w)
+	logo := logoLines(w, n, w-c1)
 	lw := 0
 	if logo != nil {
-		lw = logoWidth + 2
+		lw = Cells(plain(logo[0])) + 2
 	}
 	c3 := max(0, w-c1-2-lw)
 	colW := 18
@@ -787,7 +790,7 @@ func (a *app) header(w, n int) []string {
 			if i < len(logo) {
 				line += logo[i]
 			} else {
-				line += strings.Repeat(" ", logoWidth)
+				line += strings.Repeat(" ", lw-2)
 			}
 		}
 		out[i] = line
