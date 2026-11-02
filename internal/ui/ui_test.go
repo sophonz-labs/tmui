@@ -124,20 +124,26 @@ func TestPlanAttach(t *testing.T) {
 }
 
 func TestLogo(t *testing.T) {
-	if got := logoLines("v0.1.0", logoMin-1); got != nil {
-		t.Errorf("narrow: %q", got)
+	full := logoLines(logoMin, len(logo), logoMin-38)
+	if len(full) != len(logo) {
+		t.Fatalf("wide and tall: %d lines", len(full))
 	}
-	got := logoLines("v0.1.0", logoMin)
-	if len(got) != 3 {
-		t.Fatalf("wide: %d lines", len(got))
-	}
-	for _, l := range got {
+	for _, l := range full {
 		if Cells(plain(l)) != logoWidth {
 			t.Errorf("%q is %d columns", plain(l), Cells(plain(l)))
 		}
 	}
+	if got := logoLines(logoMin, 6, logoMin-38); len(got) != 1 || plain(got[0]) != logoName {
+		t.Errorf("short header: %q", got)
+	}
+	if got := logoLines(logoMin-1, len(logo), logoMin-39); len(got) != 1 {
+		t.Errorf("narrow: %q", got)
+	}
+	if got := logoLines(60, 6, 22); got != nil {
+		t.Errorf("no room for a column of keys: %q", got)
+	}
 	t.Setenv("NO_COLOR", "1")
-	for _, l := range logoLines("v0.1.0", 200) {
+	for _, l := range logoLines(200, len(logo), 160) {
 		if strings.ContainsRune(strings.TrimSuffix(l, reset), '\x1b') {
 			t.Errorf("NO_COLOR: %q", l)
 		}
@@ -150,7 +156,9 @@ func testApp(w, h int, v view) *app {
 		windows:  map[string][]window{"web": {{Session: "web", ID: "@0", Name: "work", Panes: 1, Path: "/home/me/" + strings.Repeat("deep/", 30)}}},
 		panes:    map[string][]pane{"web": {{Session: "web", ID: "%0", WindowID: "@0", WindowName: "work", Command: strings.Repeat("긴 명령 ", 30)}}},
 	}
-	return &app{snap: s, version: "v0.1.0", tmuxVer: "3.8", server: "default", homeDir: "/home/me", w: w, h: h, stack: []*page{{v: v}}}
+	a := &app{snap: s, version: "v0.1.0", tmuxVer: "3.8", server: "default", homeDir: "/home/me", w: w, h: h, stack: []*page{{v: v}}, later: make(chan func(), 16), refresh: make(chan struct{}, 1)}
+	a.loadPlugins(nil)
+	return a
 }
 
 // No line may be wider than the terminal: one that is wraps, and the
@@ -158,7 +166,7 @@ func testApp(w, h int, v view) *app {
 // a line either.
 func TestRenderFits(t *testing.T) {
 	views := []view{sessionsView{}, windowsView{session: "web"}, panesView{session: "web"}}
-	for _, size := range [][2]int{{40, 12}, {60, 20}, {80, 24}, {95, 24}, {96, 24}, {120, 30}, {200, 50}} {
+	for _, size := range [][2]int{{40, 12}, {60, 20}, {80, 24}, {95, 24}, {96, 24}, {120, 30}, {116, 30}, {115, 30}, {200, 29}, {200, 50}} {
 		for _, v := range views {
 			a := testApp(size[0], size[1], v)
 			lines := a.render()
@@ -170,9 +178,9 @@ func TestRenderFits(t *testing.T) {
 					t.Errorf("%T at %v: line %d is %d columns: %q", v, size, i, n, plain(l))
 				}
 			}
-			hasLogo := strings.Contains(plain(strings.Join(lines, "\n")), logo[0])
-			if want := size[0] >= logoMin && size[1] >= 16; hasLogo != want {
-				t.Errorf("%T at %v: logo shown %v, want %v", v, size, hasLogo, want)
+			hasLogo := strings.Contains(plain(strings.Join(lines, "\n")), logo[2])
+			if want := fullLogo(size[0], size[1]); hasLogo != want {
+				t.Errorf("%T at %v: full logo shown %v, want %v", v, size, hasLogo, want)
 			}
 		}
 	}

@@ -1,39 +1,52 @@
 package ui
 
-import (
-	"os"
-	"strings"
-)
+import "os"
 
 // logo is tmui's name, top right of the header as k9s puts its own.
 var logo = []string{
-	`_|_ ._ _      o`,
-	` |_ | | | |_| |`,
+	`   /$$                             /$$`,
+	`  | $$                            |__/`,
+	` /$$$$$$   /$$$$$$/$$$$  /$$   /$$ /$$`,
+	`|_  $$_/  | $$_  $$_  $$| $$  | $$| $$`,
+	`  | $$    | $$ \ $$ \ $$| $$  | $$| $$`,
+	`  | $$ /$$| $$ | $$ | $$| $$  | $$| $$`,
+	`  |  $$$$/| $$ | $$ | $$|  $$$$$$/| $$`,
+	`   \___/  |__/ |__/ |__/ \______/ |__/`,
 }
 
-const logoWidth = 15
+const (
+	logoWidth = 38
+	logoName  = "tmui" // the one-row logo, when the full one does not fit
+	// logoMin is the narrowest terminal with the full logo: the server
+	// column (38), two columns of keys (36) and the logo, with gaps.
+	logoMin = 38 + 2 + 2*18 + 2 + logoWidth
+	// logoTall is the shortest terminal that gives the header the logo's
+	// rows; below it the table needs them more.
+	logoTall = 30
+)
 
-// logoMin is the narrowest terminal that shows the logo: below it the
-// columns of keys need the room more.
-const logoMin = 96
+// fullLogo is whether a w by h terminal shows the whole logo.
+func fullLogo(w, h int) bool { return w >= logoMin && h >= logoTall }
 
-// logoLines is the logo and the version under it, each logoWidth columns,
-// or nil when the terminal is too narrow. NO_COLOR gets plain text.
-func logoLines(version string, w int) []string {
-	if w < logoMin {
-		return nil
-	}
-	c, v := cOrange+bold, cGray
+// logoLines is the logo for a header of w columns and rows rows: the
+// full one when it fits, else the name on the top row when room is left
+// for a column of keys (cols is the space after the left column), else
+// nil. Every line is as wide as the first. NO_COLOR gets plain text.
+func logoLines(w, rows, cols int) []string {
+	c := cOrange + bold
 	if _, ok := os.LookupEnv("NO_COLOR"); ok {
-		c, v = "", ""
+		c = ""
 	}
-	out := make([]string, 0, 3)
-	for _, l := range logo {
-		out = append(out, c+fit(l, logoWidth)+reset)
+	src := logo
+	if w < logoMin || rows < len(logo) {
+		if cols-2-len(logoName) < 18 {
+			return nil
+		}
+		src = []string{logoName}
 	}
-	if version != "" {
-		pad := max(0, logoWidth-Cells(version))
-		out = append(out, strings.Repeat(" ", pad)+v+fit(version, logoWidth-pad)+reset)
+	out := make([]string, len(src))
+	for i, l := range src {
+		out[i] = c + fit(l, Cells(src[0])) + reset
 	}
 	return out
 }

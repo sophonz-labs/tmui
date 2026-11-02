@@ -11,6 +11,7 @@ type row struct {
 	id    string
 	cells []string
 	color string
+	vars  map[string]string // a plugin view's record, for its actions' placeholders
 }
 
 type hint struct{ key, desc string }
