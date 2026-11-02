@@ -58,10 +58,41 @@ The screen starts on the sessions list. `enter` goes down a level (sessions, win
 | `ctrl-d` | sessions, windows, panes | kill (asks first) |
 | `p` | sessions | the session's panes |
 | `ctrl-r` | everywhere | refresh now (it also refreshes every 2 seconds) |
-| `:` | everywhere | command: `:sessions`, `:windows [session]`, `:panes [session]`, `:tmux <args>`, `:q` |
+| `:` | everywhere | command: `:sessions`, `:windows [session]`, `:panes [session]`, `:ext`, `:tmux <args>`, `:q` |
 | `?` | everywhere | help |
 
 `:tmux <args>` runs a tmux command on the same server, for example `:tmux new-window -d -n logs` or `:tmux show -g`. What it prints opens in the pager.
+
+## Plugins
+
+A plugin brings another CLI in: its output as a view in tmui's table, and its commands on keys and on the `:` line. Plugins are JSON files; the format and the examples are in [tui-plugins](https://github.com/sophonz-labs/tui-plugins), whose [SPEC.md](https://github.com/sophonz-labs/tui-plugins/blob/main/SPEC.md) is the full reference.
+
+```sh
+tmui ext install gh-prs       # from tui-plugins; prints every command it will run and asks first
+tmui ext install ./my-plugin  # a directory with a plugin.json, or a path or URL to one
+tmui ext list
+tmui ext remove gh-prs
+```
+
+They live in `~/.config/tmui/plugins/<name>/plugin.json` (or under `$XDG_CONFIG_HOME`); tmui also reads `~/.config/tui-plugins/`, which other TUIs that implement the spec share. With `gh-prs` installed, put the cursor on a pane in a GitHub repository and press `P` (or type `:prs`): its pull requests open as a table, and `o` opens the one under the cursor in the browser.
+
+A small plugin:
+
+```json
+{
+  "v": 1,
+  "name": "git-log",
+  "views": [{ "name": "log", "run": ["git", "log", "--oneline", "-50"], "format": "lines", "cwd": "pane" }],
+  "actions": [{ "key": "d", "title": "show", "scopes": ["log"], "mode": "popup",
+                "run": ["sh", "-c", "git show --color=always \"${1%% *}\" | less -R", "sh", "{line}"], "cwd": "pane" }]
+}
+```
+
+- A view runs a command (as argv, no shell) and reads its output as `json`, `tsv` or `lines`. `refresh` runs it again on a timer; a failure shows in the view.
+- An action is a key on rows of plugin views or of tmux's own `sessions`, `windows` and `panes`. `{field}` is a field of the row, `{session}` `{window}` `{pane}` `{pane_cwd}` `{pane_command}` the tmux row's. A placeholder fills one argument and never splits it.
+- `mode` is `background` (the last line of output goes to the status line), `foreground` (the command gets the terminal), or `popup` (a tmux popup over tmui, inside tmux 3.2 or later). `confirm` asks first.
+- A command is `:name [args]`, with `{args}`.
+- tmui's own keys and commands always win. A plugin key that meets one is left out, and `:ext` says so.
 
 ## Attach and come back
 

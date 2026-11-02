@@ -156,7 +156,9 @@ func testApp(w, h int, v view) *app {
 		windows:  map[string][]window{"web": {{Session: "web", ID: "@0", Name: "work", Panes: 1, Path: "/home/me/" + strings.Repeat("deep/", 30)}}},
 		panes:    map[string][]pane{"web": {{Session: "web", ID: "%0", WindowID: "@0", WindowName: "work", Command: strings.Repeat("긴 명령 ", 30)}}},
 	}
-	return &app{snap: s, version: "v0.1.0", tmuxVer: "3.8", server: "default", homeDir: "/home/me", w: w, h: h, stack: []*page{{v: v}}}
+	a := &app{snap: s, version: "v0.1.0", tmuxVer: "3.8", server: "default", homeDir: "/home/me", w: w, h: h, stack: []*page{{v: v}}, later: make(chan func(), 16), refresh: make(chan struct{}, 1)}
+	a.loadPlugins(nil)
+	return a
 }
 
 // No line may be wider than the terminal: one that is wraps, and the

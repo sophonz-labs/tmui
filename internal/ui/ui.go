@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"golang.org/x/term"
+
+	"github.com/sophonz-labs/tmui/internal/plugin"
 )
 
 // Options is how tmui was started.
@@ -75,6 +77,9 @@ type app struct {
 	bad     bool
 	flashAt time.Time
 
+	plugins []*plugin.Plugin
+	pset    *plugin.Set
+
 	snaps   chan *snap
 	refresh chan struct{}
 	later   chan func()
@@ -126,6 +131,7 @@ func newApp(o Options) *app {
 	a := &app{t: t, at: locate(t), version: o.Version, server: server, homeDir: home, stack: []*page{{v: sessionsView{}}},
 		snaps: make(chan *snap, 1), refresh: make(chan struct{}, 1), later: make(chan func(), 16)}
 	a.tmuxVer, _ = tmuxVersion()
+	a.loadPlugins(plugin.Dirs("tmui"))
 	return a
 }
 
@@ -175,6 +181,9 @@ func (a *app) loop() {
 			expired := a.flash != "" && time.Since(a.flashAt) > 5*time.Second
 			if expired {
 				a.flash = ""
+			}
+			if v, ok := a.top().v.(*pluginView); ok {
+				v.tick(a)
 			}
 			if w == a.w && h == a.h && !expired {
 				continue
@@ -266,6 +275,10 @@ func (a *app) normalKey(k string) {
 		if p.pg != nil && p.pg.reload != nil {
 			a.reloadPager(p.pg)
 		}
+		if v, ok := p.v.(*pluginView); ok {
+			v.err = ""
+			a.runView(v)
+		}
 		return
 	}
 	if p.pg != nil {
@@ -297,7 +310,7 @@ func (a *app) normalKey(k string) {
 		if k == "right" {
 			k = "enter"
 		}
-		if !p.v.key(a, k, r) && k == "enter" && r == nil {
+		if !p.v.key(a, k, r) && !a.pluginKey(p, k, r) && k == "enter" && r == nil {
 			a.say("nothing here", false)
 		}
 		return
@@ -400,7 +413,7 @@ func (a *app) editKey(k string) {
 		}
 	case "tab":
 		if a.mode == command {
-			a.input = complete(a.input)
+			a.input = complete(a.input, a.pluginNames()...)
 		}
 	default:
 		if len([]rune(k)) == 1 {
@@ -564,6 +577,8 @@ func (a *app) runCommand(text string) {
 		a.quit = true
 	case w == "help" || w == "?":
 		a.pushPager(&pager{title: "Help", scope: "keys", lines: a.helpText()})
+	case w == "ext":
+		a.push(pluginsView{})
 	case w == "tmux":
 		if len(words) == 1 {
 			a.say(":tmux <command> [args], e.g. :tmux new-window -d", false)
@@ -586,16 +601,20 @@ func (a *app) runCommand(text string) {
 		} else {
 			a.push(panesView{session: s})
 		}
+	case a.pset.Views[w] != nil:
+		a.openView(a.pset.Views[w], a.context(a.top(), a.cursorRow(a.top())))
+	case a.pset.Commands[w] != nil:
+		a.runExec(":"+w, a.pset.Commands[w].C.Exec, a.context(a.top(), a.cursorRow(a.top())), words[1:])
 	default:
-		a.say("no such command: "+w+" (views: sessions windows panes; :tmux <args>; :q)", true)
+		a.say("no such command: "+w+" (views: sessions windows panes; :ext; :tmux <args>; :q)", true)
 	}
 }
 
-func complete(in string) string {
+func complete(in string, extra ...string) string {
 	if strings.Contains(in, " ") {
 		return in
 	}
-	names := []string{"help", "quit", "tmux"}
+	names := append([]string{"help", "quit", "tmux", "ext"}, extra...)
 	for n := range viewNames {
 		names = append(names, n)
 	}
@@ -748,6 +767,9 @@ func (a *app) header(w, n int) []string {
 	var hints []hint
 	if p := a.top(); p.v != nil {
 		hints = append(hints, p.v.hints()...)
+		for _, ar := range a.pset.Keys(scopeOf(p.v)) {
+			hints = append(hints, hint{ar.A.Key, ar.A.Title})
+		}
 		hints = append(hints, hint{"/", "filter"})
 	} else {
 		hints = append(hints, hint{"j/k", "scroll"}, hint{"/", "search"}, hint{"n/N", "next/prev"}, hint{"r", "reload"})
@@ -781,7 +803,7 @@ func (a *app) header(w, n int) []string {
 			}
 			h := hints[j]
 			k := "<" + h.key + ">"
-			line += cBlue + k + reset + " " + cGray + fit(h.desc, colW-Cells(k)-1) + reset
+			line += cBlue + k + reset + " " + cGray + fit(h.desc, colW-Cells(k)-2) + " " + reset
 			used += colW
 		}
 		line += strings.Repeat(" ", max(0, w-used-lw))
@@ -877,8 +899,17 @@ func (a *app) body(h int) []string {
 	rows := []string{cWhite + bold + cellLine(hdr) + reset}
 	if len(all) == 0 {
 		empty := "  nothing to show"
-		if _, ok := p.v.(sessionsView); ok && p.filter == "" {
-			empty = "  no sessions on this server: n makes one"
+		switch v := p.v.(type) {
+		case sessionsView:
+			if p.filter == "" {
+				empty = "  no sessions on this server: n makes one"
+			}
+		case *pluginView:
+			if v.running {
+				empty = "  running " + v.ref.V.Run[0] + "…"
+			}
+		case pluginsView:
+			empty = "  no plugins yet: tmui ext install <name> (see tmui ext)"
 		}
 		rows = append(rows, cGray+fit(empty, inner)+reset)
 	}
@@ -960,6 +991,7 @@ func (a *app) helpText() []string {
 		"COMMANDS",
 		"  :<view>     switch to a view (tab completes)",
 		"  :tmux <args>  run a tmux command on this server: :tmux new-window -d, :tmux ls",
+		"  :ext        the plugins, what they add and what they run",
 		"  :q          quit (or ctrl-c)",
 		"",
 	}
@@ -970,5 +1002,5 @@ func (a *app) helpText() []string {
 		}
 		out = append(out, "")
 	}
-	return out
+	return append(out, a.pluginHelp()...)
 }
