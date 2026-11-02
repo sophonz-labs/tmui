@@ -10,6 +10,7 @@ import (
 	"github.com/sophonz-labs/tmui/internal/config"
 	"github.com/sophonz-labs/tmui/internal/plugin"
 	"github.com/sophonz-labs/tmui/internal/ui"
+	"github.com/sophonz-labs/tmui/internal/upgrade"
 )
 
 var version = "dev"
@@ -21,6 +22,10 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == "ext" {
 		os.Exit(plugin.Main("tmui", ui.Builtins(), os.Args[2:], os.Stdin, os.Stdout))
 	}
+	if len(os.Args) > 1 && os.Args[1] == "upgrade" {
+		_, code := upgrade.Main("tmui", version, os.Args[2:], os.Stdout)
+		os.Exit(code)
+	}
 	fs := flag.NewFlagSet("tmui", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, `tmui: a terminal UI for tmux sessions, windows and panes
@@ -28,6 +33,7 @@ func main() {
 usage: tmui [-L socket-name | -S socket-path]
        tmui ext list | install <name|path|url> | remove <name>
        tmui config [show] | path | edit
+       tmui upgrade [--check] [--version vX.Y.Z]
 
   -L name     use the tmux server on socket name (as tmux -L)
   -S path     use the tmux server at socket path (as tmux -S)

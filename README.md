@@ -39,7 +39,7 @@ The gh-runs plugin: the GitHub Actions runs of the repository a pane is in:
 curl -fsSL https://dl.sophonz.io/tmui/install.sh | sh
 ```
 
-It puts `tmui` in `~/.local/bin` after checking its SHA-256 (`TMUI_INSTALL_DIR` puts it elsewhere, `TMUI_VERSION=v0.1.1` pins a release). With Go:
+It puts `tmui` in `~/.local/bin` after checking its SHA-256 (`TMUI_INSTALL_DIR` puts it elsewhere, `TMUI_VERSION=v0.1.1` pins a release). `tmui upgrade` replaces it with the latest release the same way (`--check` only says whether there is one, `--version vX.Y.Z` installs that one). With Go:
 
 ```sh
 go install github.com/sophonz-labs/tmui@latest
