@@ -251,7 +251,11 @@ func planAttach(w where, session, target, prefix string) attachPlan {
 		sock, _, _ := strings.Cut(w.tmuxEnv, ",")
 		inner = []string{"-S", sock}
 	}
-	sh := "TMUX= exec tmux"
+	sh := "TMUX= "
+	if os.Getenv("TMUI_BUNDLED_TMUX") != "" {
+		sh += "TERMINFO_DIRS=" + shellQuote(os.Getenv("TERMINFO_DIRS")) + " "
+	}
+	sh += "exec " + shellQuote(popupTmux())
 	for _, f := range append(append([]string(nil), inner...), "attach-session", "-t", target) {
 		sh += " " + shellQuote(f)
 	}
@@ -313,4 +317,12 @@ func ago(sec int64) string {
 		return fmt.Sprintf("%dh", int(d.Hours()))
 	}
 	return fmt.Sprintf("%dd", int(d.Hours()/24))
+}
+
+// popupTmux cannot rely on the outer server's older PATH.
+func popupTmux() string {
+	if bin := os.Getenv("TMUI_BUNDLED_TMUX"); bin != "" {
+		return bin
+	}
+	return "tmux"
 }

@@ -2,3 +2,6 @@
 /dist/
 *.test
 *.out
+
+/internal/tmuxruntime/tmux.tar.gz
+/artifacts/
