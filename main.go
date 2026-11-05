@@ -6,6 +6,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
+
+	"github.com/sophonz-labs/tmui/internal/tmuxruntime"
 
 	"github.com/sophonz-labs/tmui/internal/ui"
 	"github.com/sophonz-labs/tmui/pkg/config"
@@ -16,6 +19,26 @@ import (
 var version = "dev"
 
 func main() {
+	args, err := tmuxruntime.Configure("tmui", os.Args[1:])
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	os.Args = append(os.Args[:1], args...)
+	// Expose the same tmux chosen by the UI for diagnostics and offline use.
+	if len(os.Args) > 1 && os.Args[1] == "tmux" {
+		cmd := exec.Command("tmux", os.Args[2:]...)
+		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+		if err := cmd.Run(); err != nil {
+			if e, ok := err.(*exec.ExitError); ok {
+				os.Exit(e.ExitCode())
+			}
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	if len(os.Args) > 1 && os.Args[1] == "config" {
 		os.Exit(config.Main("tmui", ui.StartViews(), os.Args[2:], os.Stdout))
 	}
@@ -30,11 +53,13 @@ func main() {
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, `tmui: a terminal UI for tmux sessions, windows and panes
 
-usage: tmui [-L socket-name | -S socket-path]
+usage: tmui [--embedded-tmux] [-L socket-name | -S socket-path]
+       tmui [--embedded-tmux] tmux <args>
        tmui ext list | install <name|path|url> | remove <name>
        tmui config [show] | path | edit
        tmui upgrade [--check] [--version vX.Y.Z]
 
+  --embedded-tmux  use the tmux bundled in Linux releases
   -L name     use the tmux server on socket name (as tmux -L)
   -S path     use the tmux server at socket path (as tmux -S)
   --version   print the version

@@ -11,7 +11,7 @@
    \___/  |__/ |__/ |__/ \______/ |__/
 ```
 
-A terminal UI for tmux. It shows a tmux server's sessions, windows and panes in one screen, lets you make, rename, split and kill them, reads any pane's output, and attaches to a session in a way that comes back to tmui when you detach.
+A terminal UI for tmux. It shows a tmux server's sessions, windows and panes in one screen, lets you make, rename, split and kill them, reads any pane's output, and attaches to a session in a way that comes back to tmui when you detach. Revised 2026-11-05, rev 1.
 
 It talks to tmux directly (`list-sessions`, `list-windows`, `list-panes`, `capture-pane`), so it works with any tmux setup and needs nothing else running.
 
@@ -156,9 +156,16 @@ Before attaching, tmui says how to get back, with your real prefix key: `attachi
 
 Attaching to a window or a pane selects that window or pane first.
 
+## Bundled tmux on Linux
+
+System tmux remains the default. Linux release binaries also carry tmux 3.8,
+selected explicitly with `tmui --embedded-tmux`. No download or root access
+is needed on the destination machine. See [Linux runtime and terminal tests](docs/linux-tmux.md)
+for offline use, existing servers, and GitHub runner diagnostics.
+
 ## Requirements
 
-- tmux 3.0 or later on `PATH`. Attaching in a popup needs 3.2; a borderless popup needs 3.3.
+- System tmux 3.0 or later on `PATH`, or `--embedded-tmux` on Linux releases. Attaching in a popup needs 3.2; a borderless popup needs 3.3.
 - macOS or Linux.
 
 ## License
