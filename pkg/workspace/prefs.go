@@ -17,6 +17,8 @@ type prefs struct {
 	SideW  int    `json:"sideWidth,omitempty"`
 	PanelW int    `json:"panelWidth,omitempty"`
 	Panel  bool   `json:"panel,omitempty"`
+	// Side is whether the sidebar was open; nil before it was ever toggled.
+	Side *bool `json:"sidebar,omitempty"`
 	Tab    int    `json:"panelTab,omitempty"`
 	// Folded is the sidebar rows folded, by their key (folds survive runs).
 	Folded map[string]bool `json:"folded,omitempty"`

@@ -22,6 +22,9 @@ const (
 	// the terminal instead of narrowing it: tmux drawing again at a new width
 	// would break the lines (the web's ≤700px rule).
 	wsNarrow = 100
+	// The sidebar starts open only when the session keeps this many
+	// columns beside it (the desktop's 1100px rule, in columns).
+	middleMin = 80
 )
 
 type sideKind int
@@ -135,8 +138,21 @@ func newFrame(h Host, o Options, s *Snap, target string, more []string) *Frame {
 	if o.Size != nil {
 		ws.w, ws.h = o.Size()
 	}
-	ws.sideOn = ws.w >= wsNarrow
+	if w := ws.prefs.SideW; w > 0 {
+		ws.sideW = min(sideMax, max(sideMin, w))
+	}
+	ws.sideOn = ws.sideFits() && (ws.prefs.Side == nil || *ws.prefs.Side)
 	return ws
+}
+
+// sideFits is whether the session keeps middleMin columns with the
+// sidebar open beside it (and the panel, when that is open).
+func (ws *Frame) sideFits() bool {
+	right := ws.w
+	if px := ws.panelX(); px >= 0 {
+		right = px
+	}
+	return right-ws.sideW-1 >= middleMin
 }
 
 func unsupported(err error) bool { return err == vterm.ErrUnsupported }
@@ -223,7 +239,7 @@ func (ws *Frame) run() {
 				ws.w, ws.h = w, h
 				ws.icons.Measure()
 				if narrowBefore != (w < wsNarrow) {
-					ws.sideOn = w >= wsNarrow
+					ws.sideOn = w >= wsNarrow && (ws.prefs.Side == nil || *ws.prefs.Side)
 				}
 				ws.relayout()
 				ws.clear = true
@@ -429,6 +445,8 @@ func (ws *Frame) prefixKey(k string, raw []byte) {
 		}
 	case k == "m":
 		ws.openBar(0)
+	case k == "s": // the sidebar's first key, before b
+		ws.toggleSide()
 	case ws.byKey(k):
 	default:
 		ws.host.Say(ws.preName+" "+k+": no such key ("+ws.preName+" ? lists them)", true)
@@ -437,6 +455,9 @@ func (ws *Frame) prefixKey(k string, raw []byte) {
 
 func (ws *Frame) toggleSide() {
 	ws.sideOn = !ws.sideOn
+	on := ws.sideOn
+	ws.prefs.Side = &on
+	ws.savePrefs()
 	if !ws.sideOn {
 		ws.focusSide = false
 	}
@@ -576,6 +597,8 @@ func (ws *Frame) mouse(e mouseEv) {
 		}
 		if e.release {
 			ws.drag = false
+			ws.prefs.SideW = ws.sideW
+			ws.savePrefs()
 			ws.relayout()
 			ws.clear = true
 		}
@@ -606,7 +629,13 @@ func (ws *Frame) mouse(e mouseEv) {
 		}
 		return
 	case e.y == 0:
-		if e.press() && e.button() == 0 && ws.barAt(e.x) >= 0 {
+		switch t := ws.toggleAt(e.x); {
+		case !e.press() || e.button() != 0:
+		case t == 'b':
+			ws.toggleSide()
+		case t == 'p':
+			ws.togglePanel()
+		case ws.barAt(e.x) >= 0:
 			ws.openBar(ws.barAt(e.x))
 		}
 		return
@@ -803,7 +832,7 @@ func (ws *Frame) barItems(i int) []wsItem {
 		return ws.agentItems(ws.currentPane())
 	case "View":
 		return []wsItem{
-			{label: "Sidebar", key: k("s"), do: ws.toggleSide},
+			{label: "Sidebar", key: k("b"), do: ws.toggleSide},
 			{label: "Panel", key: k("p"), do: ws.togglePanel},
 			{label: "Agents graph", key: k("1"), do: ws.showTab(0)},
 			{label: "History", key: k("2"), do: ws.showTab(1)},
@@ -840,7 +869,7 @@ func (ws *Frame) backToList() {
 }
 
 func (ws *Frame) keysHelp() {
-	ws.host.Say(ws.preName+" then: m menus · s sidebar · p panel · 1 2 3 its tabs · tab sidebar/panel keys · : command · l list · c n , & window/session · % \" z x pane · o R adopt/release · "+ws.preName+" itself", false)
+	ws.host.Say(ws.preName+" then: m menus · b sidebar · p panel · 1 2 3 its tabs · tab sidebar/panel keys · : command · l list · c n , & window/session · % \" z x pane · o R adopt/release · "+ws.preName+" itself", false)
 }
 
 func (ws *Frame) open(title string, x, y int, items ...wsItem) {
@@ -1484,12 +1513,39 @@ func (ws *Frame) drawBar(b *strings.Builder) {
 	if ws.here != "" {
 		where = fmt.Sprintf("%s:%d %s ", ws.target, ws.hereWin, ws.herePane)
 	}
-	if room := ws.w - col - Cells(where); room >= 0 {
-		b.WriteString(strings.Repeat(" ", room) + where)
+	on := func(open bool, s string) string {
+		if open {
+			return crumbOn + s + reset + crumbOff
+		}
+		return s
+	}
+	toggles := on(ws.sideOn, toggleSide) + " " + on(ws.panelX() >= 0, togglePanel) + " "
+	if room := ws.w - col - Cells(where) - Cells(plain(toggles)); room >= 0 {
+		b.WriteString(strings.Repeat(" ", room) + where + toggles)
 	} else {
 		b.WriteString(strings.Repeat(" ", max(0, ws.w-col)))
 	}
 	b.WriteString(reset)
+}
+
+// The menu bar's two toggles at its right end, as herdr's « »: ASCII, so
+// they are one column each in every terminal and locale.
+const (
+	toggleSide  = "[<]"
+	togglePanel = "[>]"
+)
+
+// toggleAt is 'b' or 'p' for a toggle at column x of the bar, else 0.
+func (ws *Frame) toggleAt(x int) byte {
+	p := ws.w - 1 - Cells(togglePanel) // the trailing space
+	s := p - 1 - Cells(toggleSide)
+	switch {
+	case x >= p && x < p+Cells(togglePanel):
+		return 'p'
+	case x >= s && x < s+Cells(toggleSide):
+		return 'b'
+	}
+	return 0
 }
 
 // toggle folds or unfolds a sidebar row and remembers it.

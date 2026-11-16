@@ -3,7 +3,9 @@
 package workspace
 
 import (
+	"bufio"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -306,5 +308,50 @@ func TestAdopt(t *testing.T) {
 	}
 	if ws.agentItems("") != nil {
 		t.Error("items with no pane")
+	}
+}
+
+// Both sides open and close from the keys and the bar's toggles, the session
+// keeps 80 columns or the sidebar starts closed, and both are remembered.
+func TestPanelsToggle(t *testing.T) {
+	prefs := filepath.Join(t.TempDir(), "ui.json")
+	frame := func(w int) *Frame {
+		o := Options{Name: "tmui", Prefs: prefs, Later: make(chan func(), 8), Icons: NewIcons(false, nil),
+			Out: bufio.NewWriter(io.Discard), Size: func() (int, int) { return w, 40 }}
+		ws := newFrame(&fakeHost{}, o, &Snap{}, "main", nil)
+		ws.pre, ws.preName = 0x1d, "ctrl-]"
+		return ws
+	}
+	if !frame(113).sideOn {
+		t.Error("113 columns leave 80 beside the sidebar: it starts open")
+	}
+	if frame(112).sideOn {
+		t.Error("112 columns leave 79: it starts closed")
+	}
+	ws := frame(160)
+	click := func(x int) { ws.mouse(mouseEv{b: 0, x: x, y: 0}) }
+	click(ws.w - 7) // [<]
+	if ws.sideOn {
+		t.Fatal("the bar's [<] did not close the sidebar")
+	}
+	click(ws.w - 3) // [>]
+	if ws.panelX() < 0 {
+		t.Fatal("the bar's [>] did not open the panel")
+	}
+	_, _, mid, _ := ws.termRect()
+	if mid != 160-ws.panelW()-1 {
+		t.Errorf("the session is %d wide with only the panel open", mid)
+	}
+	again := frame(160)
+	if again.sideOn || again.panelX() < 0 {
+		t.Errorf("not remembered: sidebar %v, panel %v", again.sideOn, again.panelX() >= 0)
+	}
+	again.input([]byte("\x1db"))
+	if !again.sideOn {
+		t.Error("ctrl-] b did not open the sidebar")
+	}
+	again.input([]byte("\x1ds"))
+	if again.sideOn {
+		t.Error("ctrl-] s no longer toggles it")
 	}
 }
