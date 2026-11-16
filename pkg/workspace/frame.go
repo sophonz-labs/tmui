@@ -1521,6 +1521,10 @@ func (ws *Frame) drawStatus(b *strings.Builder) {
 	}
 	agents := cTeal + fmt.Sprintf("%d working", working) + reset + cGray + " · " + reset + cOrange + fmt.Sprintf("%d waiting", waiting) + reset
 	right := " " + ws.preName + " ? "
+	if ws.panelX() < 0 {
+		// The panel's key, while it is closed: nothing else on screen says it.
+		right = " " + ws.preName + " p panel · ? "
+	}
 	room := ws.w - Cells(left) - Cells(plain(agents)) - Cells(right)
 	if room < 0 {
 		left = fit(left, max(0, Cells(left)+room))
