@@ -229,7 +229,7 @@ type usageWindow struct {
 	Label       string  `json:"label"`
 	Minutes     int     `json:"minutes"`
 	UsedPercent float64 `json:"usedPercent"`
-	ResetsAt    int64   `json:"resetsAt"`
+	ResetsAt    int64   `json:"resetsAt"` // Unix ms
 }
 
 // historyAnswer is GET /api/usage/history: tokens per day, agent, model
@@ -266,7 +266,7 @@ func (x usageWindow) pace(now time.Time) (float64, bool) {
 		return 0, false
 	}
 	span := time.Duration(x.Minutes) * time.Minute
-	gone := span - time.Unix(x.ResetsAt, 0).Sub(now)
+	gone := span - time.UnixMilli(x.ResetsAt).Sub(now)
 	if gone < 0 || gone > span {
 		return 0, false
 	}
@@ -320,7 +320,7 @@ func (ws *Frame) usageLines(w int) []string {
 			}
 			when := ""
 			if x.ResetsAt > 0 {
-				if s := until(time.Unix(x.ResetsAt, 0), now); s != "" {
+				if s := until(time.UnixMilli(x.ResetsAt), now); s != "" {
 					when = " resets " + s
 				}
 			}
