@@ -137,6 +137,15 @@ func TestFlags(t *testing.T) {
 	if c := Load(p, views); len(c.Warnings) != 1 || !strings.Contains(c.Warnings[0], "unknown key st") {
 		t.Errorf("no flag: %v", c.Warnings)
 	}
+	// A tool's flag under the shared ui section, beside the shared keys.
+	ws := Flag{Key: "ui.workspace"}
+	os.WriteFile(p, []byte("ui:\n  logo: false\n  workspace: true\n"), 0o644)
+	if c := Load(p, views, ws); !c.Flags["ui.workspace"] || c.Logo || c.Source["ui.workspace"] != "file" || len(c.Warnings) != 0 {
+		t.Errorf("ui flag: %+v %v", c.Flags, c.Warnings)
+	}
+	if c := Load(p, views); len(c.Warnings) != 1 || !strings.Contains(c.Warnings[0], "unknown key ui.workspace") {
+		t.Errorf("ui flag unknown: %v", c.Warnings)
+	}
 	tpl := Template("tool", views, read)
 	if !strings.HasSuffix(tpl, "\n\n"+read.Template) || !strings.HasPrefix(tpl, Template("tool", views)) {
 		t.Errorf("template:\n%s", tpl)

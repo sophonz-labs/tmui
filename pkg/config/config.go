@@ -147,7 +147,15 @@ func (c *Config) parse(data []byte, views []string) {
 		k, v := root.Content[i].Value, root.Content[i+1]
 		switch k {
 		case "ui":
-			section("ui", v, map[string]*bool{"logo": &c.Logo, "headless": &c.Headless, "color": &c.Color}, nil)
+			keys := map[string]*bool{"logo": &c.Logo, "headless": &c.Headless, "color": &c.Color}
+			own := c.section("ui") // the tool's flags under ui (stui's ui.workspace)
+			for fk, b := range own {
+				keys[fk] = b
+			}
+			section("ui", v, keys, nil)
+			for fk, b := range own {
+				c.Flags["ui."+fk] = *b
+			}
 		case "plugins":
 			section("plugins", v, map[string]*bool{"enabled": &c.PluginsEnabled}, func(k string, v *yaml.Node) bool {
 				if k != "disabled" {

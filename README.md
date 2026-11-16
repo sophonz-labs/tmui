@@ -161,6 +161,15 @@ Attaching to a window or a pane selects that window or pane first.
 - tmux 3.0 or later on `PATH`. Attaching in a popup needs 3.2; a borderless popup needs 3.3.
 - macOS or Linux.
 
+## Go packages
+
+Other tools import tmui's `pkg/` directory:
+
+- `pkg/config`, `pkg/plugin`, `pkg/upgrade` and `pkg/clip`.
+- `pkg/workspace`: the workspace frame. A tmux client runs in the middle, with a sidebar of this machine's sessions, windows and agents (the orchestration tree), a right panel (agents graph, history, documents) and a menu bar. It also handles mouse, the `ctrl-]` prefix, and agent icons (kitty graphics, or a letter). The app supplies the rest through `workspace.Host`: what the middle runs, the server it reads, extra sidebar rows, and the documents.
+- `pkg/vterm`: a program in a pseudo-terminal, kept by a pure Go VT emulator. `pkg/vterm/vt` is a patched copy of `charmbracelet/x/vt` (MIT, see its README).
+- `pkg/termmd`: markdown drawn for a terminal.
+
 ## License
 
-MIT
+MIT. `pkg/vterm/vt` keeps its own MIT notice.
