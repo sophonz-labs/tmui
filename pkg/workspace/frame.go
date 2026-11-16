@@ -630,6 +630,11 @@ func (ws *Frame) mouse(e mouseEv) {
 	if e.x < x0 || e.x >= x0+tw {
 		return
 	}
+	// A click on the session gives it the keys back: a click on the panel
+	// or ctrl-] tab took them, and typing there went nowhere.
+	if e.press() {
+		ws.focusSide, ws.panel.focus = false, false
+	}
 	if e.press() && e.button() == 2 {
 		ws.termMenu(e.x, e.y, e.x-x0, e.y-y0)
 		return

@@ -72,6 +72,45 @@ func TestFrameInput(t *testing.T) {
 	}
 }
 
+// Keys a terminal like Ghostty sends reach the program as they came: kitty
+// keyboard (CSI u), focus reports and bracketed paste. And after the panel
+// took the keys (a click on it), a click on the session gives them back.
+func TestFrameInputGhostty(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "got")
+	term, err := vterm.Start([]string{"sh", "-c", "stty raw -echo; exec cat > " + out}, os.Environ(), 80, 24)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer term.Close()
+	time.Sleep(300 * time.Millisecond)
+	ws := testFrame(t, &Snap{})
+	ws.t, ws.w, ws.h, ws.sideOn = term, 120, 30, false
+	ws.panel.focus = true // as after a click on a panel tab
+	ws.input([]byte("lost"))
+	ws.input([]byte("\x1b[<0;50;3M\x1b[<0;50;3m")) // a click on the session
+	if ws.panel.focus || ws.focusSide {
+		t.Fatal("a click on the session left the keys with the panel")
+	}
+	for _, b := range []string{
+		"\x1b[97;5u",       // ctrl-a in the kitty keyboard protocol
+		"\x1b[I", "\x1b[O", // focus in and out
+		"\x1b[200~p\x1b]x\x1b[201~", // a bracketed paste
+		"k",
+	} {
+		ws.input([]byte(b))
+	}
+	want := "\x1b[97;5u\x1b[I\x1b[O\x1b[200~p\x1b]x\x1b[201~k"
+	var got []byte
+	for end := time.Now().Add(3 * time.Second); time.Now().Before(end); time.Sleep(50 * time.Millisecond) {
+		if got, _ = os.ReadFile(out); string(got) == want {
+			break
+		}
+	}
+	if string(got) != want {
+		t.Fatalf("the program read %q, want %q", got, want)
+	}
+}
+
 // A click on a name in the menu bar opens that menu below it; left and
 // right move along the bar. The first name is the app's.
 func TestMenuBar(t *testing.T) {
