@@ -169,7 +169,8 @@ Other tools import tmui's `pkg/` directory:
 - `pkg/workspace`: the workspace frame. A tmux client runs in the middle, with a sidebar of this machine's sessions, windows and agents (the orchestration tree), a right panel of icon tabs (the window in front, AI usage, CI, git status, agents graph, history, documents) and a menu bar. It also handles mouse, the `ctrl-]` prefix, and agent icons (kitty graphics, or a letter). The app supplies the rest through `workspace.Host`: what the middle runs, the server it reads, extra sidebar rows, and the documents.
 - `pkg/vterm`: a program in a pseudo-terminal, kept by a pure Go VT emulator. `pkg/vterm/vt` is a patched copy of `charmbracelet/x/vt` (MIT, see its README).
 - `pkg/termmd`: markdown drawn for a terminal.
+- `pkg/pricing`: tokens priced at public API rates, from LiteLLM's price list and then OpenRouter's, cached for an hour, with a user's overrides in `pricing.json`. The model lookup is ported from tokscale (MIT, see `pkg/pricing/NOTICE`).
 
 ## License
 
-MIT. `pkg/vterm/vt` keeps its own MIT notice.
+MIT. `pkg/vterm/vt` and `pkg/pricing` keep their own MIT notices.
