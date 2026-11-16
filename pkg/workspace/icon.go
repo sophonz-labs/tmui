@@ -80,12 +80,8 @@ func (ic *Icons) Cell(agent string) string {
 	if ic != nil {
 		key, svg, col = ic.src(agent)
 	}
-	if ic != nil && ic.kitty && key != "" {
-		if id, ok := ic.image(key, svg); ok {
-			// The image's id is the placeholder's foreground colour; the
-			// diacritics are row 0, columns 0 and 1.
-			return fmt.Sprintf("\x1b[38;2;%d;%d;%dm\U0010EEEE̅̅\U0010EEEE̅̍\x1b[39m", id>>16&255, id>>8&255, id&255)
-		}
+	if p, ok := ic.picture(key, svg); ok {
+		return p
 	}
 	l := letters[agent]
 	if l == "" && agent != "" {
@@ -95,6 +91,34 @@ func (ic *Icons) Cell(agent string) string {
 		l = "·"
 	}
 	return brandColor(col) + l + "\x1b[39m " // the row's background stays
+}
+
+// Glyph is slug's icon (an st UI icon, such as generic-shell) as two
+// columns: its picture where the terminal draws kitty images, else glyph,
+// one column, and a space.
+func (ic *Icons) Glyph(slug, glyph string) string {
+	if ic != nil {
+		key, svg, _ := ic.src(slug)
+		if p, ok := ic.picture(key, svg); ok {
+			return p
+		}
+	}
+	return glyph + " "
+}
+
+// picture is the two-column placeholder of key's image, when the terminal
+// draws them.
+func (ic *Icons) picture(key string, svg []byte) (string, bool) {
+	if ic == nil || !ic.kitty || key == "" {
+		return "", false
+	}
+	id, ok := ic.image(key, svg)
+	if !ok {
+		return "", false
+	}
+	// The image's id is the placeholder's foreground colour; the
+	// diacritics are row 0, columns 0 and 1.
+	return fmt.Sprintf("\x1b[38;2;%d;%d;%dm\U0010EEEE̅̅\U0010EEEE̅̍\x1b[39m", id>>16&255, id>>8&255, id&255), true
 }
 
 // brandColor is the agent's brand colour c, or white when it has none or it

@@ -3,7 +3,9 @@
 package workspace
 
 import (
+	"bufio"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -151,9 +153,10 @@ func TestMenuBar(t *testing.T) {
 
 func TestSideTree(t *testing.T) {
 	s := &Snap{
+		Hostname: "box",
 		Sessions: []Session{{Name: "main"}, {Name: "w"}},
 		Windows: map[string][]Window{
-			"main": {{Index: 0, ID: "@0", Name: "coord"}, {Index: 1, ID: "@1", Name: "shell"}},
+			"main": {{Index: 0, ID: "@0", Name: "coord"}, {Index: 1, ID: "@1", Name: "shell", Command: "zsh"}},
 			"w":    {{Index: 0, ID: "@2", Name: "a"}, {Index: 1, ID: "@3", Name: "b"}, {Index: 2, ID: "@4", Name: "c"}},
 		},
 		Agents: Agents{Panes: []AgentPane{
@@ -177,25 +180,28 @@ func TestSideTree(t *testing.T) {
 		}
 		return out
 	}
+	// The desktop's tree: the machine row first (no heading), its sessions,
+	// their windows (a command's icon on a plain one), a coordinator's
+	// workers under it saying which session they live in, + New session.
 	want := []string{
-		"◂ List",
-		"▾ this machine",
+		"▾ box",
 		"  ▾ main",
-		"    ▾ 0 [claude]coord ●",
-		"      ↳ ▾ [codex]lead ○  team of 1",
+		"    ▾ 0 [claude]coord ●  coordinator",
+		"      ↳ ▾ [codex]lead ○  team of 1 · w",
 		"        ↳ [claude]sub-worker ●",
-		"      ↳ [pi]solo ?",
+		"      ↳ [pi]solo ? · w",
 		"      ◦ Explore find callers",
-		"    1 shell",
+		"    1 [zsh]shell",
 		"  ▾ w",
+		"  + New session",
 	}
 	if got := text(); strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("tree:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 	// A click on the marker folds the lead; it is remembered in the prefs.
 	ws.rows = ws.sideRows()
-	ws.sideMouse(mouseEv{b: 0, x: ws.rows[4].foldX, y: 4 + 1}, 1)
-	if got := text(); len(got) != 9 || got[4] != "      ↳ ▸ [codex]lead ○  team of 1" {
+	ws.sideMouse(mouseEv{b: 0, x: ws.rows[3].foldX, y: 3 + 1}, 1)
+	if got := text(); len(got) != 9 || got[3] != "      ↳ ▸ [codex]lead ○  team of 1 · w" {
 		t.Fatalf("after folding lead:\n%s", strings.Join(got, "\n"))
 	}
 	if p := loadPrefs(ws.prefs.path); !p.Folded["p:%2"] {
@@ -206,9 +212,16 @@ func TestSideTree(t *testing.T) {
 	if got := text(); len(got) != 9 {
 		t.Errorf("attached window changed the folds:\n%s", strings.Join(got, "\n"))
 	}
+	// The coordinator's session folded: its workers stay in their own.
 	ws.toggle("s:main")
-	if got := text(); len(got) != 4 {
-		t.Errorf("session fold: %q", got)
+	got := text()
+	want = []string{"▾ box", "  ▸ main", "  ▾ w", "    ▸ 0 [codex]a ○", "    2 [pi]c ?", "  + New session"}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("session fold:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	ws.toggle("p:%2") // the lead, still folded from above: its own worker under it
+	if got := text(); len(got) != 7 || got[4] != "      ↳ [claude]sub-worker ●" {
+		t.Errorf("the lead unfolded:\n%s", strings.Join(got, "\n"))
 	}
 }
 
@@ -306,5 +319,78 @@ func TestAdopt(t *testing.T) {
 	}
 	if ws.agentItems("") != nil {
 		t.Error("items with no pane")
+	}
+}
+
+// Both sides open and close from the keys and the bar's toggles, the session
+// keeps 80 columns or the sidebar starts closed, and both are remembered.
+func TestPanelsToggle(t *testing.T) {
+	prefs := filepath.Join(t.TempDir(), "ui.json")
+	frame := func(w int) *Frame {
+		o := Options{Name: "tmui", Prefs: prefs, Later: make(chan func(), 8), Icons: NewIcons(false, nil),
+			Out: bufio.NewWriter(io.Discard), Size: func() (int, int) { return w, 40 }}
+		ws := newFrame(&fakeHost{}, o, &Snap{}, "main", nil)
+		ws.pre, ws.preName = 0x1d, "ctrl-]"
+		return ws
+	}
+	if !frame(113).sideOn {
+		t.Error("113 columns leave 80 beside the sidebar: it starts open")
+	}
+	if frame(112).sideOn {
+		t.Error("112 columns leave 79: it starts closed")
+	}
+	ws := frame(160)
+	click := func(x int) { ws.mouse(mouseEv{b: 0, x: x, y: 0}) }
+	click(ws.w - 7) // [<]
+	if ws.sideOn {
+		t.Fatal("the bar's [<] did not close the sidebar")
+	}
+	click(ws.w - 3) // [>]
+	if ws.panelX() < 0 {
+		t.Fatal("the bar's [>] did not open the panel")
+	}
+	_, _, mid, _ := ws.termRect()
+	if mid != 160-ws.panelW()-1 {
+		t.Errorf("the session is %d wide with only the panel open", mid)
+	}
+	again := frame(160)
+	if again.sideOn || again.panelX() < 0 {
+		t.Errorf("not remembered: sidebar %v, panel %v", again.sideOn, again.panelX() >= 0)
+	}
+	again.input([]byte("\x1db"))
+	if !again.sideOn {
+		t.Error("ctrl-] b did not open the sidebar")
+	}
+	again.input([]byte("\x1ds"))
+	if again.sideOn {
+		t.Error("ctrl-] s no longer toggles it")
+	}
+}
+
+// A foot row with a menu ends in ⌃ and a click on it opens the menu just
+// above it, the address as its title.
+func TestFootMenu(t *testing.T) {
+	signedOut := false
+	h := &fakeHost{rows: func(f *Frame) []Row {
+		return []Row{{Text: "ada", Foot: true, MenuTitle: "ada@example.com", Menu: []MenuItem{
+			{Label: "Settings…"}, {Label: "Sign out", Do: func() { signedOut = true }}}}}
+	}}
+	ws := testFrame(t, &Snap{Hostname: "box"})
+	ws.host = h
+	ws.w, ws.h = 100, 30
+	ws.relayout()
+	ws.rows = ws.sideRows()
+	foot := ws.rows[len(ws.rows)-1]
+	if l := plain(footLine(foot.host, "", 30)); !strings.HasSuffix(l, " ⌃ ") || !strings.HasPrefix(l, " ada") {
+		t.Fatalf("foot: %q", l)
+	}
+	ws.pick(foot)
+	m := ws.menu
+	if m == nil || m.title != "ada@example.com" || len(m.items) != 2 || m.y+1+len(m.items) != ws.h-3 {
+		t.Fatalf("menu: %+v", m)
+	}
+	m.items[1].do()
+	if !signedOut {
+		t.Error("Sign out did nothing")
 	}
 }

@@ -22,12 +22,15 @@ const (
 	// the terminal instead of narrowing it: tmux drawing again at a new width
 	// would break the lines (the web's ≤700px rule).
 	wsNarrow = 100
+	// The sidebar starts open only when the session keeps this many
+	// columns beside it (the desktop's 1100px rule, in columns).
+	middleMin = 80
 )
 
 type sideKind int
 
 const (
-	rowList sideKind = iota
+	rowNew sideKind = iota // + New session
 	rowMachine
 	rowSession
 	rowWindow
@@ -135,8 +138,21 @@ func newFrame(h Host, o Options, s *Snap, target string, more []string) *Frame {
 	if o.Size != nil {
 		ws.w, ws.h = o.Size()
 	}
-	ws.sideOn = ws.w >= wsNarrow
+	if w := ws.prefs.SideW; w > 0 {
+		ws.sideW = min(sideMax, max(sideMin, w))
+	}
+	ws.sideOn = ws.sideFits() && (ws.prefs.Side == nil || *ws.prefs.Side)
 	return ws
+}
+
+// sideFits is whether the session keeps middleMin columns with the
+// sidebar open beside it (and the panel, when that is open).
+func (ws *Frame) sideFits() bool {
+	right := ws.w
+	if px := ws.panelX(); px >= 0 {
+		right = px
+	}
+	return right-ws.sideW-1 >= middleMin
 }
 
 func unsupported(err error) bool { return err == vterm.ErrUnsupported }
@@ -223,7 +239,7 @@ func (ws *Frame) run() {
 				ws.w, ws.h = w, h
 				ws.icons.Measure()
 				if narrowBefore != (w < wsNarrow) {
-					ws.sideOn = w >= wsNarrow
+					ws.sideOn = w >= wsNarrow && (ws.prefs.Side == nil || *ws.prefs.Side)
 				}
 				ws.relayout()
 				ws.clear = true
@@ -429,6 +445,8 @@ func (ws *Frame) prefixKey(k string, raw []byte) {
 		}
 	case k == "m":
 		ws.openBar(0)
+	case k == "s": // the sidebar's first key, before b
+		ws.toggleSide()
 	case ws.byKey(k):
 	default:
 		ws.host.Say(ws.preName+" "+k+": no such key ("+ws.preName+" ? lists them)", true)
@@ -437,6 +455,9 @@ func (ws *Frame) prefixKey(k string, raw []byte) {
 
 func (ws *Frame) toggleSide() {
 	ws.sideOn = !ws.sideOn
+	on := ws.sideOn
+	ws.prefs.Side = &on
+	ws.savePrefs()
 	if !ws.sideOn {
 		ws.focusSide = false
 	}
@@ -576,6 +597,8 @@ func (ws *Frame) mouse(e mouseEv) {
 		}
 		if e.release {
 			ws.drag = false
+			ws.prefs.SideW = ws.sideW
+			ws.savePrefs()
 			ws.relayout()
 			ws.clear = true
 		}
@@ -606,7 +629,13 @@ func (ws *Frame) mouse(e mouseEv) {
 		}
 		return
 	case e.y == 0:
-		if e.press() && e.button() == 0 && ws.barAt(e.x) >= 0 {
+		switch t := ws.toggleAt(e.x); {
+		case !e.press() || e.button() != 0:
+		case t == 'b':
+			ws.toggleSide()
+		case t == 'p':
+			ws.togglePanel()
+		case ws.barAt(e.x) >= 0:
 			ws.openBar(ws.barAt(e.x))
 		}
 		return
@@ -658,7 +687,7 @@ func (ws *Frame) sideMouse(e mouseEv, y0 int) {
 	if n := len(ws.rows); n > 0 && isFoot(ws.rows[n-1]) {
 		_, _, _, th := ws.termRect()
 		switch {
-		case e.y == y0+th-1 && ws.rows[n-1].host.OnRight != nil && e.x >= ws.sideW-Cells(plain(ws.rows[n-1].host.Right)):
+		case e.y == y0+th-1 && ws.rows[n-1].host.OnRight != nil && e.x >= ws.sideW-Cells(plain(ws.rows[n-1].host.Right+footMark(ws.rows[n-1].host))) && e.x < ws.sideW-Cells(plain(footMark(ws.rows[n-1].host))):
 			ws.rows[n-1].host.OnRight()
 			return
 		case e.y == y0+th-1:
@@ -688,12 +717,19 @@ func (ws *Frame) sideMouse(e mouseEv, y0 int) {
 // client is on, else by attaching again.
 func (ws *Frame) pick(r sideRow) {
 	switch r.kind {
-	case rowList:
-		ws.backToList()
+	case rowNew:
+		ws.newSession()
 	case rowMachine:
 		ws.toggle("machine")
 	case rowHost:
 		switch h := r.host; {
+		case h.Foot && len(h.Menu) > 0:
+			items := make([]wsItem, len(h.Menu))
+			for i, it := range h.Menu {
+				items[i] = wsItem{label: it.Label, do: it.Do}
+			}
+			ws.open(h.MenuTitle, 0, 0, items...)
+			ws.menu.y = max(1, ws.h-4-len(items)) // its bottom edge on the row above the foot
 		case h.Target != "":
 			ws.reattach(h.Target, h.More)
 		case h.Pick != nil:
@@ -803,11 +839,15 @@ func (ws *Frame) barItems(i int) []wsItem {
 		return ws.agentItems(ws.currentPane())
 	case "View":
 		return []wsItem{
-			{label: "Sidebar", key: k("s"), do: ws.toggleSide},
+			{label: "Sidebar", key: k("b"), do: ws.toggleSide},
 			{label: "Panel", key: k("p"), do: ws.togglePanel},
-			{label: "Agents graph", key: k("1"), do: ws.showTab(0)},
-			{label: "History", key: k("2"), do: ws.showTab(1)},
-			{label: "Documents", key: k("3"), do: ws.showTab(2)},
+			{label: "Terminal", key: k("1"), do: ws.showTab(tabTerm)},
+			{label: "AI Usage", key: k("2"), do: ws.showTab(tabUsage)},
+			{label: "CI", key: k("3"), do: ws.showTab(tabCI)},
+			{label: "Git", key: k("4"), do: ws.showTab(tabGit)},
+			{label: "Agents graph", key: k("5"), do: ws.showTab(tabAgents)},
+			{label: "History", key: k("6"), do: ws.showTab(tabHistory)},
+			{label: "Documents", key: k("7"), do: ws.showTab(tabDocs)},
 			{label: "Back to the list", key: k("l"), do: ws.backToList},
 		}
 	case "Help":
@@ -840,7 +880,7 @@ func (ws *Frame) backToList() {
 }
 
 func (ws *Frame) keysHelp() {
-	ws.host.Say(ws.preName+" then: m menus · s sidebar · p panel · 1 2 3 its tabs · tab sidebar/panel keys · : command · l list · c n , & window/session · % \" z x pane · o R adopt/release · "+ws.preName+" itself", false)
+	ws.host.Say(ws.preName+" then: m menus · b sidebar · p panel · 1-7 its tabs · tab sidebar/panel keys · : command · l list · c n , & window/session · % \" z x pane · o R adopt/release · "+ws.preName+" itself", false)
 }
 
 func (ws *Frame) open(title string, x, y int, items ...wsItem) {
@@ -1154,14 +1194,17 @@ func (ws *Frame) paneAt(x, y int) string {
 // the prefs file; the window the client is on never unfolds or folds anything.
 func (ws *Frame) sideRows() []sideRow {
 	s := ws.snap
-	rows := []sideRow{{kind: rowList, text: "◂ List", color: cBlue}}
+	// The machine's row first, by its name: no "this machine" heading (it
+	// is not this machine to whoever looks from another device).
 	name := s.Hostname
 	if name == "" {
-		name = "this machine"
+		name, _ = os.Hostname()
+		name, _, _ = strings.Cut(name, ".")
 	}
 	open := !ws.prefs.Folded["machine"]
-	rows = append(rows, sideRow{kind: rowMachine, text: fold(open) + name, color: cWhite + bold})
+	rows := []sideRow{{kind: rowMachine, text: fold(open) + name, color: cWhite + bold}}
 	t := teamsOf(s.Agents.Panes)
+	t.keepShown(s.Agents.Panes, ws.prefs.Folded)
 	for _, se := range s.Sessions {
 		if !open {
 			break
@@ -1185,10 +1228,47 @@ func (ws *Frame) sideRows() []sideRow {
 			if a != nil && t.placed[a.ID] {
 				continue // under its coordinator
 			}
-			rows = ws.agentRows(rows, t, se.Name, w.Index, w.ID, w.Name, a, 4, "")
+			rows = ws.agentRows(rows, t, se.Name, w.Index, w.ID, w.Name, a, 4, "", se.Name)
+			if a == nil && w.Command != "" {
+				rows[len(rows)-1].icon, rows[len(rows)-1].lead = w.Command, fmt.Sprintf("    %d ", w.Index)
+				rows[len(rows)-1].text = w.Name
+			}
 		}
 	}
+	if open {
+		rows = append(rows, sideRow{kind: rowNew, text: "  + New session", color: cGray})
+	}
 	return ws.hostRows(rows)
+}
+
+// keepShown leaves a worker in its own session's list when its lead's row
+// is not shown (the lead's session folded), as the desktop app does
+// (adoption.rs nested_under): a worker never vanishes with another session.
+func (t teams) keepShown(ps []AgentPane, folded map[string]bool) {
+	byID := map[string]*AgentPane{}
+	for i := range ps {
+		byID[ps[i].ID] = &ps[i]
+	}
+	var shown func(p *AgentPane, depth int) bool
+	shown = func(p *AgentPane, depth int) bool {
+		if depth > 3 {
+			return false
+		}
+		// Under its lead when that row shows; else back in its own session.
+		if t.placed[p.ID] && shown(byID[p.Orch.Parent], depth+1) {
+			return true
+		}
+		return !folded["s:"+p.Session]
+	}
+	for lead, kids := range t.kids {
+		if shown(byID[lead], 0) {
+			continue
+		}
+		for _, k := range kids {
+			delete(t.placed, k.ID)
+		}
+		delete(t.kids, lead)
+	}
 }
 
 // hostRows are the host's, after this machine's (Host.Rows).
@@ -1241,7 +1321,8 @@ func windowAgent(ps []AgentPane, session string, window int) *AgentPane {
 // agentRows adds a window's row, indented by in columns, and under it, unless
 // folded, its agent's workers (each with their own) and running subagents.
 // arrow is "↳ " for a worker.
-func (ws *Frame) agentRows(rows []sideRow, t teams, session string, index int, id, name string, a *AgentPane, in int, arrow string) []sideRow {
+// parentSession is the session of the row it hangs under.
+func (ws *Frame) agentRows(rows []sideRow, t teams, session string, index int, id, name string, a *AgentPane, in int, arrow, parentSession string) []sideRow {
 	pad := strings.Repeat(" ", in)
 	r := sideRow{kind: rowWindow, session: session, window: index, id: id, agent: a, color: cGray,
 		text: fmt.Sprintf("%s%s%d %s", pad, arrow, index, name)}
@@ -1275,15 +1356,21 @@ func (ws *Frame) agentRows(rows []sideRow, t teams, session string, index int, i
 		r.color = cGray
 	}
 	r.text = label + " " + StateMark(a.State)
-	if len(kids) > 0 && arrow != "" {
+	switch {
+	case len(kids) > 0 && arrow != "":
 		r.text += fmt.Sprintf("  team of %d", len(kids))
+	case len(kids) > 0 && a.Orch != nil && a.Orch.Role == "coordinator":
+		r.text += "  coordinator"
+	}
+	if arrow != "" && session != parentSession {
+		r.text += " · " + session // a worker in another session says where
 	}
 	rows = append(rows, r)
 	if !open {
 		return rows
 	}
 	for _, k := range kids {
-		rows = ws.agentRows(rows, t, k.Session, k.Window, "", k.WindowName, k, in+2, "↳ ")
+		rows = ws.agentRows(rows, t, k.Session, k.Window, "", k.WindowName, k, in+2, "↳ ", session)
 	}
 	for _, sub := range subs {
 		rows = append(rows, sideRow{kind: rowWindow, session: session, window: index, id: id, color: cPink,
@@ -1484,12 +1571,39 @@ func (ws *Frame) drawBar(b *strings.Builder) {
 	if ws.here != "" {
 		where = fmt.Sprintf("%s:%d %s ", ws.target, ws.hereWin, ws.herePane)
 	}
-	if room := ws.w - col - Cells(where); room >= 0 {
-		b.WriteString(strings.Repeat(" ", room) + where)
+	on := func(open bool, s string) string {
+		if open {
+			return crumbOn + s + reset + crumbOff
+		}
+		return s
+	}
+	toggles := on(ws.sideOn, toggleSide) + " " + on(ws.panelX() >= 0, togglePanel) + " "
+	if room := ws.w - col - Cells(where) - Cells(plain(toggles)); room >= 0 {
+		b.WriteString(strings.Repeat(" ", room) + where + toggles)
 	} else {
 		b.WriteString(strings.Repeat(" ", max(0, ws.w-col)))
 	}
 	b.WriteString(reset)
+}
+
+// The menu bar's two toggles at its right end, as herdr's « »: ASCII, so
+// they are one column each in every terminal and locale.
+const (
+	toggleSide  = "[<]"
+	togglePanel = "[>]"
+)
+
+// toggleAt is 'b' or 'p' for a toggle at column x of the bar, else 0.
+func (ws *Frame) toggleAt(x int) byte {
+	p := ws.w - 1 - Cells(togglePanel) // the trailing space
+	s := p - 1 - Cells(toggleSide)
+	switch {
+	case x >= p && x < p+Cells(togglePanel):
+		return 'p'
+	case x >= s && x < s+Cells(toggleSide):
+		return 'b'
+	}
+	return 0
 }
 
 // toggle folds or unfolds a sidebar row and remembers it.
@@ -1510,6 +1624,14 @@ func isFoot(r sideRow) bool { return r.host != nil && r.host.Foot }
 
 // footLine is the pinned row: its Left, its text, and its Right at the end.
 func footLine(h *Row, color string, w int) string {
-	right := Cells(plain(h.Right))
-	return h.Left + color + fit(" "+h.Text, w-Cells(plain(h.Left))-right) + reset + h.Right
+	r := h.Right + footMark(h)
+	return h.Left + color + fit(" "+h.Text, w-Cells(plain(h.Left))-Cells(plain(r))) + reset + r
+}
+
+// footMark is the ⌃ after a foot row's Right when it opens a menu.
+func footMark(h *Row) string {
+	if len(h.Menu) == 0 {
+		return ""
+	}
+	return cGray + " ⌃ " + reset
 }

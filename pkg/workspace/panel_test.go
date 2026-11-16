@@ -6,6 +6,7 @@ import (
 	"image/png"
 	"strings"
 	"testing"
+	"time"
 )
 
 func panelWS(t *testing.T) *Frame {
@@ -67,7 +68,7 @@ func TestGraphLayout(t *testing.T) {
 
 func TestPanelKeys(t *testing.T) {
 	ws := panelWS(t)
-	ws.prefs.Panel, ws.panel.focus = true, true
+	ws.prefs.Panel, ws.panel.focus, ws.prefs.Tab = true, true, tabAgents
 	ws.graphLines(48, 30)
 	ws.panelKey("down")
 	ws.panelKey("down")
@@ -83,7 +84,7 @@ func TestPanelKeys(t *testing.T) {
 		t.Errorf("history of %%2: %d events", n)
 	}
 	ws.panelKey("h")
-	if ws.prefs.Tab != 1 {
+	if ws.prefs.Tab != tabHistory {
 		t.Errorf("h: tab %d", ws.prefs.Tab)
 	}
 	lines := plain(strings.Join(ws.historyLines(60, 20), "\n"))
@@ -94,9 +95,9 @@ func TestPanelKeys(t *testing.T) {
 	if n := len(ws.history()); n != 3 {
 		t.Errorf("x: %d events", n)
 	}
-	ws.panelKey("3")
-	if ws.prefs.Tab != 2 || !loadPrefs(ws.prefs.path).Panel || loadPrefs(ws.prefs.path).Tab != 2 {
-		t.Errorf("3: tab %d, saved %+v", ws.prefs.Tab, loadPrefs(ws.prefs.path))
+	ws.panelKey("7")
+	if ws.prefs.Tab != tabDocs || !loadPrefs(ws.prefs.path).Panel || loadPrefs(ws.prefs.path).Tab != tabDocs {
+		t.Errorf("7: tab %d, saved %+v", ws.prefs.Tab, loadPrefs(ws.prefs.path))
 	}
 	ws.panelKey("esc")
 	if ws.panel.focus {
@@ -190,3 +191,59 @@ func TestReaderPicture(t *testing.T) {
 var colorInk = color.NRGBA{0, 0, 0, 255}
 
 func encodePNG(w *strings.Builder, img image.Image) { png.Encode(w, img) }
+
+// The tabs are icons (a glyph here, no kitty) with the picked one's name
+// under them; a click or a number picks one; each reads the window in front.
+func TestPanelTabs(t *testing.T) {
+	ws := panelWS(t)
+	h := ws.host.(*fakeHost)
+	h.gets = map[string]string{
+		"/api/usage":      `{"agents":[{"agent":"claude","plan":"Max","windows":[{"label":"5h","usedPercent":42,"resetsAt":1794850000}]}],"guard":{"on":true}}`,
+		"/api/actions?":   `{"state":"ok","repo":"me/app","branch":"main","runs":[{"workflow":"CI","status":"completed","conclusion":"success","branch":"main"},{"workflow":"CI","status":"completed","conclusion":"failure"},{"workflow":"deploy","status":"completed","conclusion":"failure","branch":"main"},{"workflow":"e2e","status":"in_progress","branch":"x"}]}`,
+		"/api/git/status": "!not found",
+	}
+	ws.snap.Windows = map[string][]Window{"main": {{Index: 0, Name: "c", Command: "claude", Repo: "me/app", Panes: 2}}}
+	ws.here, ws.hereWin, ws.herePane = "main", 0, "%1"
+	ws.prefs.Panel, ws.w, ws.h = true, 160, 30
+	ws.relayout()
+	var b strings.Builder
+	ws.drawPanel(&b, 1, 20)
+	out := plain(b.String())
+	if !strings.Contains(out, " >   %   #   +   @   ~   =   p ×") || !strings.Contains(out, "Terminal") {
+		t.Fatalf("tab row and title:\n%q", out)
+	}
+	px := ws.panelX()
+	ws.panelMouse(mouseEv{b: 0, x: px + 1 + 2*tabCell + 1, y: 1}, 1)
+	if ws.prefs.Tab != tabCI {
+		t.Errorf("click on the third: tab %d", ws.prefs.Tab)
+	}
+	run := func(lines func() []string) string {
+		lines()
+		(<-ws.later)()
+		return plain(strings.Join(lines(), "\n"))
+	}
+	ci := run(func() []string { return ws.ciLines(50) })
+	if !strings.Contains(ci, "me/app") || !strings.Contains(ci, "✓ CI") || !strings.Contains(ci, "✗ deploy") || !strings.Contains(ci, "● e2e") || strings.Count(ci, " CI") != 1 {
+		t.Errorf("CI:\n%s", ci)
+	}
+	ws.panelKey("2")
+	if ws.prefs.Tab != tabUsage {
+		t.Errorf("2: tab %d", ws.prefs.Tab)
+	}
+	u := run(func() []string { return ws.usageLines(50) })
+	if !strings.Contains(u, "claude Max") || !strings.Contains(u, "42%") || !strings.Contains(u, "guard on") {
+		t.Errorf("usage:\n%s", u)
+	}
+	if g := run(func() []string { return ws.gitLines(50, 20) }); !strings.Contains(g, "no git view") {
+		t.Errorf("git on a host without it:\n%s", g)
+	}
+	h.gets["/api/git/status"] = `{"root":"/src/app","branch":"main","upstream":"origin/main","ahead":1,"files":[{"path":"a.go","staged":"M"},{"path":"b.go","unstaged":"M"},{"path":"new.go","untracked":true}]}`
+	ws.panel.fetched["git"].at = time.Time{}
+	if g := run(func() []string { return ws.gitLines(50, 20) }); !strings.Contains(g, "origin/main · 1 ahead, 0 behind") || !strings.Contains(g, "M  a.go") || !strings.Contains(g, "?  new.go") {
+		t.Errorf("git:\n%s", g)
+	}
+	term := plain(strings.Join(ws.termLines(50), "\n"))
+	if !strings.Contains(term, "main:0 c") || !strings.Contains(term, "me/app") || !strings.Contains(term, "2 panes") || !strings.Contains(term, "coordinator ship it · run r-1") || !strings.Contains(term, "workers: 왼쪽 일꾼 ●, right ○") {
+		t.Errorf("terminal:\n%s", term)
+	}
+}

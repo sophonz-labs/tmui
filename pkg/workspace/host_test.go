@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -18,13 +19,24 @@ type fakeHost struct {
 	rows   func(f *Frame) []Row
 	docs   *DocNode
 	files  map[string][]byte
+	gets   map[string]string // path prefix -> JSON answer, or "!" + an error
 }
 
 func (h *fakeHost) Attach(target string, more []string) []string {
 	h.attach = append(h.attach, strings.Join(append([]string{target}, more...), " "))
 	return []string{"sh", "-c", "sleep 30"}
 }
-func (h *fakeHost) Get(path string, out any) error { return errors.New("no server") }
+func (h *fakeHost) Get(path string, out any) error {
+	for p, v := range h.gets {
+		if strings.HasPrefix(path, p) {
+			if e, ok := strings.CutPrefix(v, "!"); ok {
+				return errors.New(e)
+			}
+			return json.Unmarshal([]byte(v), out)
+		}
+	}
+	return errors.New("no server")
+}
 func (h *fakeHost) Do(method, path string, body, out any) error {
 	h.calls = append(h.calls, method+" "+path)
 	return nil

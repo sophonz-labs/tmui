@@ -191,6 +191,16 @@ type Row struct {
 	Foot        bool
 	Left, Right string
 	OnRight     func()
+	// Menu: a click on a Foot row opens it just above the row, under
+	// MenuTitle (an account's address), and the row ends in ⌃.
+	Menu      []MenuItem
+	MenuTitle string
+}
+
+// MenuItem is a line of a Row's menu.
+type MenuItem struct {
+	Label string
+	Do    func()
 }
 
 // DocNode is a folder of the Documents tree.
