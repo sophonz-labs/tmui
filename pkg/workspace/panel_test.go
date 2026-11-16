@@ -6,6 +6,7 @@ import (
 	"image/png"
 	"strings"
 	"testing"
+	"time"
 )
 
 func panelWS(t *testing.T) *Frame {
@@ -199,7 +200,7 @@ func TestPanelTabs(t *testing.T) {
 	h.gets = map[string]string{
 		"/api/usage":      `{"agents":[{"agent":"claude","plan":"Max","windows":[{"label":"5h","usedPercent":42,"resetsAt":1794850000}]}],"guard":{"on":true}}`,
 		"/api/actions?":   `{"state":"ok","repo":"me/app","branch":"main","runs":[{"workflow":"CI","status":"completed","conclusion":"success","branch":"main"},{"workflow":"CI","status":"completed","conclusion":"failure"},{"workflow":"deploy","status":"completed","conclusion":"failure","branch":"main"},{"workflow":"e2e","status":"in_progress","branch":"x"}]}`,
-		"/api/git/status": "!404 Not Found",
+		"/api/git/status": "!not found",
 	}
 	ws.snap.Windows = map[string][]Window{"main": {{Index: 0, Name: "c", Command: "claude", Repo: "me/app", Panes: 2}}}
 	ws.here, ws.hereWin, ws.herePane = "main", 0, "%1"
@@ -235,6 +236,11 @@ func TestPanelTabs(t *testing.T) {
 	}
 	if g := run(func() []string { return ws.gitLines(50, 20) }); !strings.Contains(g, "no git view") {
 		t.Errorf("git on a host without it:\n%s", g)
+	}
+	h.gets["/api/git/status"] = `{"root":"/src/app","branch":"main","upstream":"origin/main","ahead":1,"files":[{"path":"a.go","staged":"M"},{"path":"b.go","unstaged":"M"},{"path":"new.go","untracked":true}]}`
+	ws.panel.fetched["git"].at = time.Time{}
+	if g := run(func() []string { return ws.gitLines(50, 20) }); !strings.Contains(g, "origin/main · 1 ahead, 0 behind") || !strings.Contains(g, "M  a.go") || !strings.Contains(g, "?  new.go") {
+		t.Errorf("git:\n%s", g)
 	}
 	term := plain(strings.Join(ws.termLines(50), "\n"))
 	if !strings.Contains(term, "main:0 c") || !strings.Contains(term, "me/app") || !strings.Contains(term, "2 panes") || !strings.Contains(term, "coordinator ship it · run r-1") || !strings.Contains(term, "workers: 왼쪽 일꾼 ●, right ○") {

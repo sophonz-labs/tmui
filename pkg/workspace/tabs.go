@@ -372,10 +372,12 @@ func (ws *Frame) gitLines(w, h int) []string {
 	}
 	v, err := ws.fetch("git", "/api/git/status?pane="+url.QueryEscape(pane), 10*time.Second, func() any { return &gitAnswer{} })
 	if err != "" {
-		if strings.Contains(err, "404") || strings.Contains(strings.ToLower(err), "not found") {
+		// A server without the route says "not found" (stui) or only its
+		// status; st's own 404s ("not in a git checkout") are worth reading.
+		if err == "not found" || strings.HasPrefix(err, "404") {
 			return []string{gray(w, "this machine's server has no git view")}
 		}
-		return []string{cOrange + fit(" "+err, w)}
+		return []string{gray(w, err)}
 	}
 	g, _ := v.(*gitAnswer)
 	if g == nil {
