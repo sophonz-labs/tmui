@@ -49,7 +49,7 @@ func Load(ctx context.Context, o Options) (*Table, error) {
 		o.OpenRouterURL = OpenRouterURL
 	}
 	var errs []string
-	at := time.Now()
+	var at time.Time // the oldest list's; zero with none
 	get := func(name, url string, parse func([]byte) (map[string]Rates, error)) map[string]Rates {
 		path := filepath.Join(o.Dir, "pricing-"+name+".json")
 		body, mod, err := cached(path)
@@ -68,7 +68,7 @@ func Load(ctx context.Context, o Options) (*Table, error) {
 		if err != nil {
 			return nil
 		}
-		if mod.Before(at) {
+		if at.IsZero() || mod.Before(at) {
 			at = mod
 		}
 		r, _ := parse(body)

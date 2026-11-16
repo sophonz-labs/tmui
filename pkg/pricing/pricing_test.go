@@ -139,7 +139,7 @@ func TestLoad(t *testing.T) {
 
 	// Offline with no cache: no prices, no download.
 	tb, _ = Load(context.Background(), Options{Dir: t.TempDir(), Offline: true, LiteLLMURL: srv.URL + "/litellm"})
-	if _, ok := tb.Lookup("claude-sonnet-4-5"); ok || hits.Load() != 4 {
+	if _, ok := tb.Lookup("claude-sonnet-4-5"); ok || hits.Load() != 4 || !tb.At.IsZero() {
 		t.Errorf("offline: %d downloads", hits.Load())
 	}
 }
