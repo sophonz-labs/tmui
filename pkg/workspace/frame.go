@@ -1226,7 +1226,7 @@ func windowAgent(ps []AgentPane, session string, window int) *AgentPane {
 	var best *AgentPane
 	for i := range ps {
 		p := &ps[i]
-		if p.Session == session && p.Window == window && (best == nil || stateRank(p.State) > stateRank(best.State)) {
+		if p.Session == session && p.Window == window && (best == nil || StateRank(p.State) > StateRank(best.State)) {
 			best = p
 		}
 	}
@@ -1269,7 +1269,7 @@ func (ws *Frame) agentRows(rows []sideRow, t teams, session string, index int, i
 	if a.Orch != nil && a.Orch.Done && a.State == "idle" {
 		r.color = cGray
 	}
-	r.text = label + " " + stateMark(a.State)
+	r.text = label + " " + StateMark(a.State)
 	if len(kids) > 0 && arrow != "" {
 		r.text += fmt.Sprintf("  team of %d", len(kids))
 	}
@@ -1287,13 +1287,14 @@ func (ws *Frame) agentRows(rows []sideRow, t teams, session string, index int, i
 	return rows
 }
 
-func stateRank(s string) int {
+// StateRank orders agent states, the one that needs a person most highest.
+func StateRank(s string) int {
 	return map[string]int{"waiting": 5, "error": 4, "working": 3, "delegated": 2, "idle": 1}[s]
 }
 
-// stateMark is an agent's state as one character: the web's dot and
+// StateMark is an agent's state as one character: the web's dot and
 // question mark.
-func stateMark(s string) string {
+func StateMark(s string) string {
 	switch s {
 	case "working":
 		return "●"

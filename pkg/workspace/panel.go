@@ -162,7 +162,7 @@ func (ws *Frame) graph() []*gcard {
 		if p.Orch != nil && p.Orch.Summary != "" {
 			what = p.Orch.Summary
 		}
-		c.line = stateMark(p.State) + " " + p.State
+		c.line = StateMark(p.State) + " " + p.State
 		if what != "" {
 			c.line += " · " + what
 		}

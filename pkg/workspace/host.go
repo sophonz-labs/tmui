@@ -214,7 +214,18 @@ type Doc struct {
 // the host's list is asked for. why is what happened, for the host to say.
 // ok is false when this platform cannot run the frame; nothing was done.
 func Run(h Host, o Options, s *Snap, target string, more []string) (why string, ok bool) {
-	f := newFrame(h, o, s, target, more)
+	return New(h, o, s, target, more).Run()
+}
+
+// New is a frame not running yet, for a host that keeps it to Set new
+// snapshots (through Options.Later) while it runs.
+func New(h Host, o Options, s *Snap, target string, more []string) *Frame {
+	return newFrame(h, o, s, target, more)
+}
+
+// Run is the package's Run on a frame from New.
+func (f *Frame) Run() (why string, ok bool) {
+	o := f.o
 	if err := f.start(); err != nil {
 		if unsupported(err) {
 			return "", false
