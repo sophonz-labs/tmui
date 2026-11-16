@@ -14,7 +14,7 @@ func TestUsageOverview(t *testing.T) {
 	ws := panelWS(t)
 	h := ws.host.(*fakeHost)
 	now := time.Now()
-	half := now.Add(84 * time.Hour).Unix() // half a week left
+	half := now.Add(84 * time.Hour).UnixMilli() // half a week left
 	today, before := now.Format("2006-01-02"), now.AddDate(0, 0, -3).Format("2006-01-02")
 	h.gets = map[string]string{
 		"/api/usage": fmt.Sprintf(`{"agents":[{"agent":"claude","windows":[
