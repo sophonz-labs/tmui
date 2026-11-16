@@ -217,15 +217,74 @@ type usageAnswer struct {
 		Account *struct {
 			Label string `json:"label"`
 		} `json:"account"`
-		Windows []struct {
-			Label       string  `json:"label"`
-			UsedPercent float64 `json:"usedPercent"`
-			ResetsAt    int64   `json:"resetsAt"`
-		} `json:"windows"`
+		Windows []usageWindow `json:"windows"`
 	} `json:"agents"`
 	Guard struct {
 		On bool `json:"on"`
 	} `json:"guard"`
+}
+
+type usageWindow struct {
+	ID          string  `json:"id"`
+	Label       string  `json:"label"`
+	Minutes     int     `json:"minutes"`
+	UsedPercent float64 `json:"usedPercent"`
+	ResetsAt    int64   `json:"resetsAt"`
+}
+
+// historyAnswer is GET /api/usage/history: tokens per day, agent, model
+// and account, and what they would cost at API rates (null: no price).
+type historyAnswer struct {
+	Days []struct {
+		Date       string   `json:"date"`
+		Input      int64    `json:"input"`
+		Output     int64    `json:"output"`
+		CacheWrite int64    `json:"cacheWrite"`
+		CacheRead  int64    `json:"cacheRead"`
+		Cost       *float64 `json:"cost"`
+	} `json:"days"`
+}
+
+// name is what a window is called on screen: its label, else its id's.
+func (x usageWindow) name() string {
+	switch {
+	case x.Label != "":
+		return x.Label
+	case x.ID == "five_hour":
+		return "5 hours"
+	case x.ID == "seven_day":
+		return "week"
+	}
+	return strings.ReplaceAll(x.ID, "_", " ")
+}
+
+// pace is how far use runs ahead of the time gone in the window, in
+// points: +20 at 60% used half way through. ok is false when the window's
+// length or reset is not known.
+func (x usageWindow) pace(now time.Time) (float64, bool) {
+	if x.Minutes <= 0 || x.ResetsAt <= 0 {
+		return 0, false
+	}
+	span := time.Duration(x.Minutes) * time.Minute
+	gone := span - time.Unix(x.ResetsAt, 0).Sub(now)
+	if gone < 0 || gone > span {
+		return 0, false
+	}
+	return x.UsedPercent - 100*float64(gone)/float64(span), true
+}
+
+// until is how long until t, "3h", "2d", or "".
+func until(t, now time.Time) string {
+	d := t.Sub(now)
+	switch {
+	case d <= 0:
+		return ""
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes())+1)
+	case d < 48*time.Hour:
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	}
+	return fmt.Sprintf("%dd", int(d.Hours()/24))
 }
 
 func (ws *Frame) usageLines(w int) []string {
@@ -239,8 +298,9 @@ func (ws *Frame) usageLines(w int) []string {
 		return append(out, gray(w, "reading…"))
 	}
 	if len(u.Agents) == 0 {
-		return append(out, gray(w, "no agent's limits known yet"))
+		out = append(out, gray(w, "no agent's limits known yet"))
 	}
+	now := time.Now()
 	for _, a := range u.Agents {
 		more := ""
 		if a.Plan != "" {
@@ -251,8 +311,6 @@ func (ws *Frame) usageLines(w int) []string {
 		}
 		out = append(out, spans(w, "", " ", "", ws.icons.Cell(a.Agent), cWhite+bold, " "+a.Agent, reset+cGray, more))
 		for _, x := range a.Windows {
-			bw := max(4, w-28)
-			n := min(bw, int(x.UsedPercent*float64(bw)/100+0.5))
 			color := cGreen
 			switch {
 			case x.UsedPercent >= 95:
@@ -262,17 +320,93 @@ func (ws *Frame) usageLines(w int) []string {
 			}
 			when := ""
 			if x.ResetsAt > 0 {
-				when = " " + time.Unix(x.ResetsAt, 0).Local().Format("Jan 2 15:04")
+				if s := until(time.Unix(x.ResetsAt, 0), now); s != "" {
+					when = " resets " + s
+				}
 			}
-			out = append(out, spans(w, cGray, fmt.Sprintf("   %-7s ", cut(x.Label, 7)), color, strings.Repeat("|", n), cGray, strings.Repeat(".", bw-n),
-				color, fmt.Sprintf(" %3.0f%%", x.UsedPercent), cGray, when))
+			pace, pc := "", cGray
+			if p, ok := x.pace(now); ok {
+				pace = fmt.Sprintf(" %+.0f", p)
+				if p > 5 {
+					pc = cOrange
+				}
+			}
+			out = append(out, spans(w, cWhite, "   "+x.name(), color, fmt.Sprintf(" %.0f%%", x.UsedPercent), cGray, when, pc, pace))
+			bw := max(4, w-4)
+			n := min(bw, int(x.UsedPercent*float64(bw)/100+0.5))
+			out = append(out, spans(w, "", "   ", color, strings.Repeat("|", n), cGray, strings.Repeat(".", bw-n)))
 		}
 	}
+	out = append(out, ws.tokenLines(w, now)...)
 	guard := "off"
 	if u.Guard.On {
 		guard = "on"
 	}
-	return append(out, "", gray(w, "guard "+guard))
+	return append(out, "", gray(w, "guard "+guard+" · pace: points used ahead (+) of the time gone"))
+}
+
+// tokenLines is today's tokens and their API-rate cost, and the last 30
+// days as one line; none where the host keeps no token history.
+func (ws *Frame) tokenLines(w int, now time.Time) []string {
+	v, err := ws.fetch("history", "/api/usage/history?days=30", 5*time.Minute, func() any { return &historyAnswer{} })
+	h, _ := v.(*historyAnswer)
+	if h == nil || err != "" || len(h.Days) == 0 {
+		return nil
+	}
+	today := now.Format("2006-01-02")
+	per := map[string]int64{}
+	var tokens int64
+	cost, priced := 0.0, false
+	for _, d := range h.Days {
+		n := d.Input + d.Output + d.CacheWrite + d.CacheRead
+		per[d.Date] += n
+		if d.Date == today {
+			tokens += n
+			if d.Cost != nil {
+				cost, priced = cost+*d.Cost, true
+			}
+		}
+	}
+	line := " today " + count(tokens) + " tokens"
+	if priced {
+		line += fmt.Sprintf(" · $%.2f at API rates", cost)
+	}
+	days := make([]int64, 30)
+	top := int64(0)
+	for i := range days {
+		days[i] = per[now.AddDate(0, 0, i-29).Format("2006-01-02")]
+		top = max(top, days[i])
+	}
+	return []string{"", spans(w, cWhite+bold, " Tokens", reset+cGray, line), spans(w, cGray, "   30d ", cTeal, spark(days, top))}
+}
+
+// spark draws each value as one of eight bars, the highest full; a day
+// with none is a space.
+func spark(vs []int64, top int64) string {
+	const bars = "▁▂▃▄▅▆▇█"
+	var b strings.Builder
+	for _, v := range vs {
+		if v <= 0 || top <= 0 {
+			b.WriteByte(' ')
+			continue
+		}
+		i := int(v * 7 / top)
+		b.WriteString(string([]rune(bars)[i]))
+	}
+	return b.String()
+}
+
+// count is n short: 950, 12.3k, 4.1M, 2.0B.
+func count(n int64) string {
+	switch {
+	case n < 1000:
+		return fmt.Sprint(n)
+	case n < 1_000_000:
+		return fmt.Sprintf("%.1fk", float64(n)/1e3)
+	case n < 1_000_000_000:
+		return fmt.Sprintf("%.1fM", float64(n)/1e6)
+	}
+	return fmt.Sprintf("%.1fB", float64(n)/1e9)
 }
 
 func cut(s string, n int) string {

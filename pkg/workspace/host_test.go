@@ -27,15 +27,21 @@ func (h *fakeHost) Attach(target string, more []string) []string {
 	return []string{"sh", "-c", "sleep 30"}
 }
 func (h *fakeHost) Get(path string, out any) error {
-	for p, v := range h.gets {
-		if strings.HasPrefix(path, p) {
-			if e, ok := strings.CutPrefix(v, "!"); ok {
-				return errors.New(e)
-			}
-			return json.Unmarshal([]byte(v), out)
+	// The longest key path starts with: /api/usage is not /api/usage/history.
+	best := ""
+	for p := range h.gets {
+		if strings.HasPrefix(path, p) && len(p) > len(best) {
+			best = p
 		}
 	}
-	return errors.New("no server")
+	v, ok := h.gets[best]
+	if !ok {
+		return errors.New("no server")
+	}
+	if e, ok := strings.CutPrefix(v, "!"); ok {
+		return errors.New(e)
+	}
+	return json.Unmarshal([]byte(v), out)
 }
 func (h *fakeHost) Do(method, path string, body, out any) error {
 	h.calls = append(h.calls, method+" "+path)
