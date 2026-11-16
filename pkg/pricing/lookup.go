@@ -44,7 +44,7 @@ type Match struct {
 
 // Table is the price lists, by lower-cased key.
 type Table struct {
-	// At is when the lists were read from the network.
+	// At is when the oldest list was read from the network, zero with none.
 	At        time.Time
 	Overrides map[string]Rates
 	lists     [2]list
