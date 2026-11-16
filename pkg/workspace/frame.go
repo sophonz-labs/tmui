@@ -834,9 +834,13 @@ func (ws *Frame) barItems(i int) []wsItem {
 		return []wsItem{
 			{label: "Sidebar", key: k("b"), do: ws.toggleSide},
 			{label: "Panel", key: k("p"), do: ws.togglePanel},
-			{label: "Agents graph", key: k("1"), do: ws.showTab(0)},
-			{label: "History", key: k("2"), do: ws.showTab(1)},
-			{label: "Documents", key: k("3"), do: ws.showTab(2)},
+			{label: "Terminal", key: k("1"), do: ws.showTab(tabTerm)},
+			{label: "AI Usage", key: k("2"), do: ws.showTab(tabUsage)},
+			{label: "CI", key: k("3"), do: ws.showTab(tabCI)},
+			{label: "Git", key: k("4"), do: ws.showTab(tabGit)},
+			{label: "Agents graph", key: k("5"), do: ws.showTab(tabAgents)},
+			{label: "History", key: k("6"), do: ws.showTab(tabHistory)},
+			{label: "Documents", key: k("7"), do: ws.showTab(tabDocs)},
 			{label: "Back to the list", key: k("l"), do: ws.backToList},
 		}
 	case "Help":
@@ -869,7 +873,7 @@ func (ws *Frame) backToList() {
 }
 
 func (ws *Frame) keysHelp() {
-	ws.host.Say(ws.preName+" then: m menus · b sidebar · p panel · 1 2 3 its tabs · tab sidebar/panel keys · : command · l list · c n , & window/session · % \" z x pane · o R adopt/release · "+ws.preName+" itself", false)
+	ws.host.Say(ws.preName+" then: m menus · b sidebar · p panel · 1-7 its tabs · tab sidebar/panel keys · : command · l list · c n , & window/session · % \" z x pane · o R adopt/release · "+ws.preName+" itself", false)
 }
 
 func (ws *Frame) open(title string, x, y int, items ...wsItem) {
@@ -1243,8 +1247,9 @@ func (t teams) keepShown(ps []AgentPane, folded map[string]bool) {
 		if depth > 3 {
 			return false
 		}
-		if t.placed[p.ID] {
-			return shown(byID[p.Orch.Parent], depth+1)
+		// Under its lead when that row shows; else back in its own session.
+		if t.placed[p.ID] && shown(byID[p.Orch.Parent], depth+1) {
+			return true
 		}
 		return !folded["s:"+p.Session]
 	}

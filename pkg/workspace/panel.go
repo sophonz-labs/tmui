@@ -29,8 +29,6 @@ const (
 	cardGap, levelGap                = 2, 3
 )
 
-var panelTabs = []string{"Agents", "History", "Docs"}
-
 type panelState struct {
 	focus  bool
 	drag   bool
@@ -50,7 +48,8 @@ type panelState struct {
 	docsAt   time.Time
 	docsNote string
 	dcur     int
-	top      int // the first line of History or Documents shown
+	top      int // the first line of History, Git or Documents shown
+	fetched  map[string]*fetched
 	reader   *reader
 }
 
@@ -358,38 +357,50 @@ func (ws *Frame) drawPanel(b *strings.Builder, y0, h int) {
 		b.WriteString(fmt.Sprintf("\x1b[%d;%dH", y+1, px+1))
 		b.WriteString(cBlue + "│" + reset + s)
 	}
-	// The tabs.
+	if ws.prefs.Tab < 0 || ws.prefs.Tab >= len(panelTabs) {
+		ws.prefs.Tab = tabAgents // from a newer or broken ui.json
+	}
+	// The tabs: icons, the picked one's name under them.
 	var t strings.Builder
-	n := 0
-	for i, name := range panelTabs {
+	for i, tab := range panelTabs {
 		style := crumbOff
 		if i == ws.prefs.Tab {
 			style = crumbOn
 		}
-		t.WriteString(style + " " + name + " " + reset)
-		n += Cells(name) + 2
+		t.WriteString(style + " " + ws.icons.Glyph(tab.icon, tab.glyph) + style + " " + reset)
 	}
 	hint := " p ×"
 	if ws.panel.focus {
 		hint = " esc"
 	}
+	n := len(panelTabs) * tabCell
 	line(y0, t.String()+cGray+fit(hint, w-n)+reset)
-	body := ws.panelBody(w, h-1)
-	for i := range h - 1 {
+	title := cWhite + bold + fit(" "+panelTabs[ws.prefs.Tab].name, w) + reset
+	line(y0+1, title+strings.Repeat(" ", max(0, w-Cells(plain(title)))))
+	body := ws.panelBody(w, h-2)
+	for i := range h - 2 {
 		s := ""
 		if i < len(body) {
 			s = body[i]
 		}
-		line(y0+1+i, s+reset+strings.Repeat(" ", max(0, w-Cells(plain(s)))))
+		line(y0+2+i, s+reset+strings.Repeat(" ", max(0, w-Cells(plain(s)))))
 	}
 }
 
 // panelBody is the tab's lines, each at most w columns.
 func (ws *Frame) panelBody(w, h int) []string {
 	switch ws.prefs.Tab {
-	case 1:
+	case tabTerm:
+		return ws.termLines(w)
+	case tabUsage:
+		return ws.usageLines(w)
+	case tabCI:
+		return ws.ciLines(w)
+	case tabGit:
+		return ws.gitLines(w, h)
+	case tabHistory:
 		return ws.historyLines(w, h)
-	case 2:
+	case tabDocs:
 		return ws.docLines(w, h)
 	}
 	return ws.graphLines(w, h)
@@ -641,7 +652,7 @@ func (ws *Frame) openDoc(id, run, file string) {
 				ws.host.Say(err.Error(), true)
 				return
 			}
-			ws.prefs.Tab = 2
+			ws.prefs.Tab = tabDocs
 			ws.panel.reader = &reader{title: d.Title, text: d.Content, folder: d.Folder}
 		}
 	}()
@@ -753,7 +764,7 @@ func (ws *Frame) panelKey(k string) {
 	p := &ws.panel
 	switch k {
 	case "esc":
-		if p.reader != nil && ws.prefs.Tab == 2 {
+		if p.reader != nil && ws.prefs.Tab == tabDocs {
 			p.reader = nil
 			return
 		}
@@ -762,12 +773,12 @@ func (ws *Frame) panelKey(k string) {
 	case "tab":
 		p.focus = false
 		return
-	case "1", "2", "3":
+	case "1", "2", "3", "4", "5", "6", "7":
 		ws.showTab(int(k[0] - '1'))()
 		return
 	}
 	switch ws.prefs.Tab {
-	case 0:
+	case tabAgents:
 		cs := p.cards
 		i := -1
 		for j, c := range cs {
@@ -791,13 +802,20 @@ func (ws *Frame) panelKey(k string) {
 		case "r":
 			ws.releaseSel()
 		case "h":
-			ws.prefs.Tab, p.top, p.hcur = 1, 0, 0
+			ws.prefs.Tab, p.top, p.hcur = tabHistory, 0, 0
 		case "a":
 			p.all = !p.all
 		case "x":
 			p.sel = ""
 		}
-	case 1:
+	case tabGit:
+		switch k {
+		case "up", "k":
+			p.top = max(0, p.top-1)
+		case "down", "j":
+			p.top++
+		}
+	case tabHistory:
 		switch k {
 		case "up", "k":
 			p.hcur--
@@ -810,7 +828,7 @@ func (ws *Frame) panelKey(k string) {
 				ws.openDoc("", evs[p.hcur].Run, evs[p.hcur].Sent)
 			}
 		}
-	case 2:
+	case tabDocs:
 		if r := p.reader; r != nil {
 			switch k {
 			case "up", "k":
@@ -884,9 +902,9 @@ func (ws *Frame) panelMouse(e mouseEv, y0 int) {
 			d = -3
 		}
 		switch {
-		case ws.prefs.Tab == 0:
+		case ws.prefs.Tab == tabAgents:
 			ws.panel.oy = max(0, ws.panel.oy+d)
-		case ws.prefs.Tab == 2 && ws.panel.reader != nil:
+		case ws.prefs.Tab == tabDocs && ws.panel.reader != nil:
 			ws.panel.reader.top = max(0, ws.panel.reader.top+d)
 		default:
 			ws.panel.top = max(0, ws.panel.top+d)
@@ -898,18 +916,17 @@ func (ws *Frame) panelMouse(e mouseEv, y0 int) {
 	}
 	ws.panel.focus, ws.focusSide = true, false
 	if e.y == y0 { // the tabs
-		x := px + 1
-		for i, name := range panelTabs {
-			if e.x >= x && e.x < x+Cells(name)+2 {
-				ws.showTab(i)()
-			}
-			x += Cells(name) + 2
+		if i := (e.x - px - 1) / tabCell; e.x > px && i < len(panelTabs) {
+			ws.showTab(i)()
 		}
 		return
 	}
-	row := e.y - y0 - 1
+	row := e.y - y0 - 2 // under the tabs and the title
+	if row < 0 {
+		return
+	}
 	switch ws.prefs.Tab {
-	case 0:
+	case tabAgents:
 		cx, cy := e.x-px-1+ws.panel.ox, row+ws.panel.oy
 		for _, c := range ws.panel.cards {
 			if cx < c.x || cx >= c.x+cardW || cy < c.y || cy >= c.y+cardH {
@@ -925,7 +942,7 @@ func (ws *Frame) panelMouse(e mouseEv, y0 int) {
 			}
 			return
 		}
-	case 2:
+	case tabDocs:
 		if ws.panel.reader != nil {
 			return
 		}
