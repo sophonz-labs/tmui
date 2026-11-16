@@ -30,7 +30,7 @@ const (
 type sideKind int
 
 const (
-	rowList sideKind = iota
+	rowNew sideKind = iota // + New session
 	rowMachine
 	rowSession
 	rowWindow
@@ -717,8 +717,8 @@ func (ws *Frame) sideMouse(e mouseEv, y0 int) {
 // client is on, else by attaching again.
 func (ws *Frame) pick(r sideRow) {
 	switch r.kind {
-	case rowList:
-		ws.backToList()
+	case rowNew:
+		ws.newSession()
 	case rowMachine:
 		ws.toggle("machine")
 	case rowHost:
@@ -1183,14 +1183,17 @@ func (ws *Frame) paneAt(x, y int) string {
 // the prefs file; the window the client is on never unfolds or folds anything.
 func (ws *Frame) sideRows() []sideRow {
 	s := ws.snap
-	rows := []sideRow{{kind: rowList, text: "◂ List", color: cBlue}}
+	// The machine's row first, by its name: no "this machine" heading (it
+	// is not this machine to whoever looks from another device).
 	name := s.Hostname
 	if name == "" {
-		name = "this machine"
+		name, _ = os.Hostname()
+		name, _, _ = strings.Cut(name, ".")
 	}
 	open := !ws.prefs.Folded["machine"]
-	rows = append(rows, sideRow{kind: rowMachine, text: fold(open) + name, color: cWhite + bold})
+	rows := []sideRow{{kind: rowMachine, text: fold(open) + name, color: cWhite + bold}}
 	t := teamsOf(s.Agents.Panes)
+	t.keepShown(s.Agents.Panes, ws.prefs.Folded)
 	for _, se := range s.Sessions {
 		if !open {
 			break
@@ -1214,10 +1217,46 @@ func (ws *Frame) sideRows() []sideRow {
 			if a != nil && t.placed[a.ID] {
 				continue // under its coordinator
 			}
-			rows = ws.agentRows(rows, t, se.Name, w.Index, w.ID, w.Name, a, 4, "")
+			rows = ws.agentRows(rows, t, se.Name, w.Index, w.ID, w.Name, a, 4, "", se.Name)
+			if a == nil && w.Command != "" {
+				rows[len(rows)-1].icon, rows[len(rows)-1].lead = w.Command, fmt.Sprintf("    %d ", w.Index)
+				rows[len(rows)-1].text = w.Name
+			}
 		}
 	}
+	if open {
+		rows = append(rows, sideRow{kind: rowNew, text: "  + New session", color: cGray})
+	}
 	return ws.hostRows(rows)
+}
+
+// keepShown leaves a worker in its own session's list when its lead's row
+// is not shown (the lead's session folded), as the desktop app does
+// (adoption.rs nested_under): a worker never vanishes with another session.
+func (t teams) keepShown(ps []AgentPane, folded map[string]bool) {
+	byID := map[string]*AgentPane{}
+	for i := range ps {
+		byID[ps[i].ID] = &ps[i]
+	}
+	var shown func(p *AgentPane, depth int) bool
+	shown = func(p *AgentPane, depth int) bool {
+		if depth > 3 {
+			return false
+		}
+		if t.placed[p.ID] {
+			return shown(byID[p.Orch.Parent], depth+1)
+		}
+		return !folded["s:"+p.Session]
+	}
+	for lead, kids := range t.kids {
+		if shown(byID[lead], 0) {
+			continue
+		}
+		for _, k := range kids {
+			delete(t.placed, k.ID)
+		}
+		delete(t.kids, lead)
+	}
 }
 
 // hostRows are the host's, after this machine's (Host.Rows).
@@ -1270,7 +1309,8 @@ func windowAgent(ps []AgentPane, session string, window int) *AgentPane {
 // agentRows adds a window's row, indented by in columns, and under it, unless
 // folded, its agent's workers (each with their own) and running subagents.
 // arrow is "↳ " for a worker.
-func (ws *Frame) agentRows(rows []sideRow, t teams, session string, index int, id, name string, a *AgentPane, in int, arrow string) []sideRow {
+// parentSession is the session of the row it hangs under.
+func (ws *Frame) agentRows(rows []sideRow, t teams, session string, index int, id, name string, a *AgentPane, in int, arrow, parentSession string) []sideRow {
 	pad := strings.Repeat(" ", in)
 	r := sideRow{kind: rowWindow, session: session, window: index, id: id, agent: a, color: cGray,
 		text: fmt.Sprintf("%s%s%d %s", pad, arrow, index, name)}
@@ -1304,15 +1344,21 @@ func (ws *Frame) agentRows(rows []sideRow, t teams, session string, index int, i
 		r.color = cGray
 	}
 	r.text = label + " " + StateMark(a.State)
-	if len(kids) > 0 && arrow != "" {
+	switch {
+	case len(kids) > 0 && arrow != "":
 		r.text += fmt.Sprintf("  team of %d", len(kids))
+	case len(kids) > 0 && a.Orch != nil && a.Orch.Role == "coordinator":
+		r.text += "  coordinator"
+	}
+	if arrow != "" && session != parentSession {
+		r.text += " · " + session // a worker in another session says where
 	}
 	rows = append(rows, r)
 	if !open {
 		return rows
 	}
 	for _, k := range kids {
-		rows = ws.agentRows(rows, t, k.Session, k.Window, "", k.WindowName, k, in+2, "↳ ")
+		rows = ws.agentRows(rows, t, k.Session, k.Window, "", k.WindowName, k, in+2, "↳ ", session)
 	}
 	for _, sub := range subs {
 		rows = append(rows, sideRow{kind: rowWindow, session: session, window: index, id: id, color: cPink,

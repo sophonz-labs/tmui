@@ -153,9 +153,10 @@ func TestMenuBar(t *testing.T) {
 
 func TestSideTree(t *testing.T) {
 	s := &Snap{
+		Hostname: "box",
 		Sessions: []Session{{Name: "main"}, {Name: "w"}},
 		Windows: map[string][]Window{
-			"main": {{Index: 0, ID: "@0", Name: "coord"}, {Index: 1, ID: "@1", Name: "shell"}},
+			"main": {{Index: 0, ID: "@0", Name: "coord"}, {Index: 1, ID: "@1", Name: "shell", Command: "zsh"}},
 			"w":    {{Index: 0, ID: "@2", Name: "a"}, {Index: 1, ID: "@3", Name: "b"}, {Index: 2, ID: "@4", Name: "c"}},
 		},
 		Agents: Agents{Panes: []AgentPane{
@@ -179,25 +180,28 @@ func TestSideTree(t *testing.T) {
 		}
 		return out
 	}
+	// The desktop's tree: the machine row first (no heading), its sessions,
+	// their windows (a command's icon on a plain one), a coordinator's
+	// workers under it saying which session they live in, + New session.
 	want := []string{
-		"◂ List",
-		"▾ this machine",
+		"▾ box",
 		"  ▾ main",
-		"    ▾ 0 [claude]coord ●",
-		"      ↳ ▾ [codex]lead ○  team of 1",
+		"    ▾ 0 [claude]coord ●  coordinator",
+		"      ↳ ▾ [codex]lead ○  team of 1 · w",
 		"        ↳ [claude]sub-worker ●",
-		"      ↳ [pi]solo ?",
+		"      ↳ [pi]solo ? · w",
 		"      ◦ Explore find callers",
-		"    1 shell",
+		"    1 [zsh]shell",
 		"  ▾ w",
+		"  + New session",
 	}
 	if got := text(); strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("tree:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 	// A click on the marker folds the lead; it is remembered in the prefs.
 	ws.rows = ws.sideRows()
-	ws.sideMouse(mouseEv{b: 0, x: ws.rows[4].foldX, y: 4 + 1}, 1)
-	if got := text(); len(got) != 9 || got[4] != "      ↳ ▸ [codex]lead ○  team of 1" {
+	ws.sideMouse(mouseEv{b: 0, x: ws.rows[3].foldX, y: 3 + 1}, 1)
+	if got := text(); len(got) != 9 || got[3] != "      ↳ ▸ [codex]lead ○  team of 1 · w" {
 		t.Fatalf("after folding lead:\n%s", strings.Join(got, "\n"))
 	}
 	if p := loadPrefs(ws.prefs.path); !p.Folded["p:%2"] {
@@ -208,9 +212,16 @@ func TestSideTree(t *testing.T) {
 	if got := text(); len(got) != 9 {
 		t.Errorf("attached window changed the folds:\n%s", strings.Join(got, "\n"))
 	}
+	// The coordinator's session folded: its workers stay in their own.
 	ws.toggle("s:main")
-	if got := text(); len(got) != 4 {
-		t.Errorf("session fold: %q", got)
+	got := text()
+	want = []string{"▾ box", "  ▸ main", "  ▾ w", "    ▸ 0 [codex]a ○", "    2 [pi]c ?", "  + New session"}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("session fold:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	ws.toggle("p:%2") // the lead, still folded from above: its own worker under it
+	if got := text(); len(got) != 7 || got[4] != "      ↳ [claude]sub-worker ●" {
+		t.Errorf("the lead unfolded:\n%s", strings.Join(got, "\n"))
 	}
 }
 
