@@ -166,7 +166,7 @@ Attaching to a window or a pane selects that window or pane first.
 Other tools import tmui's `pkg/` directory:
 
 - `pkg/config`, `pkg/plugin`, `pkg/upgrade` and `pkg/clip`.
-- `pkg/workspace`: the workspace frame. A tmux client runs in the middle, with a sidebar of this machine's sessions, windows and agents (the orchestration tree), a right panel (agents graph, history, documents) and a menu bar. It also handles mouse, the `ctrl-]` prefix, and agent icons (kitty graphics, or a letter). The app supplies the rest through `workspace.Host`: what the middle runs, the server it reads, extra sidebar rows, and the documents.
+- `pkg/workspace`: the workspace frame. A tmux client runs in the middle, with a sidebar of this machine's sessions, windows and agents (the orchestration tree), a right panel of icon tabs (the window in front, AI usage, CI, git status, agents graph, history, documents) and a menu bar. It also handles mouse, the `ctrl-]` prefix, and agent icons (kitty graphics, or a letter). The app supplies the rest through `workspace.Host`: what the middle runs, the server it reads, extra sidebar rows, and the documents.
 - `pkg/vterm`: a program in a pseudo-terminal, kept by a pure Go VT emulator. `pkg/vterm/vt` is a patched copy of `charmbracelet/x/vt` (MIT, see its README).
 - `pkg/termmd`: markdown drawn for a terminal.
 
