@@ -366,3 +366,31 @@ func TestPanelsToggle(t *testing.T) {
 		t.Error("ctrl-] s no longer toggles it")
 	}
 }
+
+// A foot row with a menu ends in ⌃ and a click on it opens the menu just
+// above it, the address as its title.
+func TestFootMenu(t *testing.T) {
+	signedOut := false
+	h := &fakeHost{rows: func(f *Frame) []Row {
+		return []Row{{Text: "ada", Foot: true, MenuTitle: "ada@example.com", Menu: []MenuItem{
+			{Label: "Settings…"}, {Label: "Sign out", Do: func() { signedOut = true }}}}}
+	}}
+	ws := testFrame(t, &Snap{Hostname: "box"})
+	ws.host = h
+	ws.w, ws.h = 100, 30
+	ws.relayout()
+	ws.rows = ws.sideRows()
+	foot := ws.rows[len(ws.rows)-1]
+	if l := plain(footLine(foot.host, "", 30)); !strings.HasSuffix(l, " ⌃ ") || !strings.HasPrefix(l, " ada") {
+		t.Fatalf("foot: %q", l)
+	}
+	ws.pick(foot)
+	m := ws.menu
+	if m == nil || m.title != "ada@example.com" || len(m.items) != 2 || m.y+1+len(m.items) != ws.h-3 {
+		t.Fatalf("menu: %+v", m)
+	}
+	m.items[1].do()
+	if !signedOut {
+		t.Error("Sign out did nothing")
+	}
+}

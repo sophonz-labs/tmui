@@ -687,7 +687,7 @@ func (ws *Frame) sideMouse(e mouseEv, y0 int) {
 	if n := len(ws.rows); n > 0 && isFoot(ws.rows[n-1]) {
 		_, _, _, th := ws.termRect()
 		switch {
-		case e.y == y0+th-1 && ws.rows[n-1].host.OnRight != nil && e.x >= ws.sideW-Cells(plain(ws.rows[n-1].host.Right)):
+		case e.y == y0+th-1 && ws.rows[n-1].host.OnRight != nil && e.x >= ws.sideW-Cells(plain(ws.rows[n-1].host.Right+footMark(ws.rows[n-1].host))) && e.x < ws.sideW-Cells(plain(footMark(ws.rows[n-1].host))):
 			ws.rows[n-1].host.OnRight()
 			return
 		case e.y == y0+th-1:
@@ -723,6 +723,13 @@ func (ws *Frame) pick(r sideRow) {
 		ws.toggle("machine")
 	case rowHost:
 		switch h := r.host; {
+		case h.Foot && len(h.Menu) > 0:
+			items := make([]wsItem, len(h.Menu))
+			for i, it := range h.Menu {
+				items[i] = wsItem{label: it.Label, do: it.Do}
+			}
+			ws.open(h.MenuTitle, 0, 0, items...)
+			ws.menu.y = max(1, ws.h-4-len(items)) // its bottom edge on the row above the foot
 		case h.Target != "":
 			ws.reattach(h.Target, h.More)
 		case h.Pick != nil:
@@ -1617,6 +1624,14 @@ func isFoot(r sideRow) bool { return r.host != nil && r.host.Foot }
 
 // footLine is the pinned row: its Left, its text, and its Right at the end.
 func footLine(h *Row, color string, w int) string {
-	right := Cells(plain(h.Right))
-	return h.Left + color + fit(" "+h.Text, w-Cells(plain(h.Left))-right) + reset + h.Right
+	r := h.Right + footMark(h)
+	return h.Left + color + fit(" "+h.Text, w-Cells(plain(h.Left))-Cells(plain(r))) + reset + r
+}
+
+// footMark is the ⌃ after a foot row's Right when it opens a menu.
+func footMark(h *Row) string {
+	if len(h.Menu) == 0 {
+		return ""
+	}
+	return cGray + " ⌃ " + reset
 }
