@@ -92,8 +92,8 @@ func TestFrameInputGhostty(t *testing.T) {
 		t.Fatal("a click on the session left the keys with the panel")
 	}
 	for _, b := range []string{
-		"\x1b[97;5u",                // ctrl-a in the kitty keyboard protocol
-		"\x1b[I", "\x1b[O",          // focus in and out
+		"\x1b[97;5u",       // ctrl-a in the kitty keyboard protocol
+		"\x1b[I", "\x1b[O", // focus in and out
 		"\x1b[200~p\x1b]x\x1b[201~", // a bracketed paste
 		"k",
 	} {
